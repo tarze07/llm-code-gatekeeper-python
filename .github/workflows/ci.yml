@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install --quiet -e ".[dev,gates]"
+
+      - name: Instalacja gitleaksa (testy integracyjne bramki G3)
+        env:
+          GITLEAKS_VERSION: "8.21.2"
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+
+      - run: ruff check gatekeeper tests scripts
+      - run: pytest -q
+      - run: gatekeeper policy lint --policy policy/gates.yaml
+      # Reguła bez testu negatywnego prędzej czy później zaczyna blokować
+      # poprawny kod — to jest ten test, uruchamiany na każdym PR-ze do repo bramy.
+      - run: semgrep --test --config rules/semgrep rules/semgrep/tests
+      # Zestaw kalibracyjny: celowo zepsute/czyste PR-y przeciw polityce z tego
+      # repo. Łapie regresję w regułach, zanim złapie ją produkcja (PLAN.md §6).
+      - run: gatekeeper calibrate

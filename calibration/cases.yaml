@@ -1,0 +1,59 @@
+# Zestaw kalibracyjny (PLAN.md §6 „Faza 0"; TOOLS.md, kamień 3).
+#
+# Każdy przypadek to para katalogów w `calibration/fixtures/<fixture>/`:
+# `base/` (stan przed zmianą) i `head/` (stan po zmianie). Harness buduje
+# z nich tymczasowe repo gita, commituje oba stany i uruchamia `run_gates`
+# tak samo, jak zrobiłoby to CI na prawdziwym PR-ze.
+#
+# To jest zalążek — docelowo dochodzą tu prawdziwe historyczne PR-y
+# (30–50 sztuk, PLAN.md §6), nie tylko syntetyczne przykłady poniżej.
+# Żeby dodać PR-a: skopiuj drzewo repo sprzed i po zmianie do dwóch
+# katalogów, nazwij fixture i dopisz przypadek — nie trzeba pisać Pythona.
+#
+# Uruchomienie: `gatekeeper calibrate`
+
+cases:
+  - name: halucynowany-pakiet
+    description: >-
+      Agent dodaje zależność, której nie ma w PyPI — najkosztowniejsza
+      klasa defektu z PLAN.md §1. Musi blokować.
+    fixture: halucynowany-pakiet
+    expect:
+      verdict: BLOCK
+      blocking_rules: [deps.unknown_package]
+
+  - name: czysty-pr
+    description: >-
+      Mały, poprawny PR bez żadnych defektów. Zero fałszywych alarmów —
+      to jest test na to, czy brama w ogóle nadaje się do codziennej pracy.
+      Wymaga gitleaksa: bez niego G3.secrets zgłasza `error` (brak narzędzia
+      to brak dowodu, nie zielona brama) i werdykt uczciwie spada do
+      PASS-WITH-REVIEW — to nie jest fałszywy alarm tego przypadku, tylko
+      niekompletne środowisko, w którym go uruchomiono.
+    fixture: czysty-pr
+    requires_tools: [gitleaks]
+    expect:
+      verdict: PASS
+
+  - name: eval-na-wejsciu
+    description: >-
+      Nowy kod wykonuje `eval()` na danych z requestu — reguła „nigdy”
+      `no-eval-on-input` (G3.sast) musi to złapać. G3.sast jest na razie
+      w `warn_only` (kamień 3, świeża bramka), więc oczekiwany werdykt to
+      PASS z ostrzeżeniem, nie BLOCK — ten przypadek dokumentuje bieżący
+      stan i ma zacząć failować w dniu, w którym ktoś zdejmie `warn_only`
+      bez sprawdzenia, czy reguła rzeczywiście działa.
+    fixture: eval-na-wejsciu
+    requires_tools: [semgrep, gitleaks] # gitleaks: patrz komentarz w `czysty-pr`
+    expect:
+      verdict: PASS
+      warning_rules: [sast.critical_count]
+
+  - name: diff-zbyt-duzy
+    description: >-
+      500-liniowy plik w jednym PR-ze — najskuteczniejsza pojedyncza reguła
+      w systemie (TOOLS.md §2.2). Musi blokować niezależnie od treści zmiany.
+    fixture: diff-zbyt-duzy
+    expect:
+      verdict: BLOCK
+      blocking_rules: [diff.effective_lines]

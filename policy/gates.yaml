@@ -1,0 +1,113 @@
+# Polityka bramy jakości.
+#
+# Zasady:
+#   * plik jest wersjonowany w repo i chroniony przez CODEOWNERS,
+#   * agent NIE ma uprawnień do jego modyfikacji — jeżeli oceniany może zmienić
+#     kryteria oceny, reszta systemu nie ma znaczenia (PLAN.md §4),
+#   * `gatekeeper policy lint` odrzuca literówki w nazwach faktów; listę
+#     dozwolonych faktów daje `gatekeeper policy facts`.
+version: 1
+
+# Dowolne trafienie => BLOCK.
+blocking:
+  - secrets.found_in_diff
+  - deps.unknown_package
+  - deps.typosquat_suspect
+  # Test, który przechodzi na kodzie sprzed zmiany, nie dowodzi niczego nowego.
+  - tests.pass_on_pre_change_code
+
+thresholds:
+  # Najskuteczniejsza pojedyncza reguła w całym systemie: duży diff od agenta
+  # jest nierecenzowalny, a przez to niebezpieczny. Pliki generowane
+  # (lockfile, snapshoty, migracje) są z tego liczenia wyłączone.
+  diff.effective_lines:
+    max: 400
+    message: "Diff jest zbyt duży, żeby dało się go rzetelnie zrecenzować — rozbij PR."
+  diff.effective_files:
+    max: 15
+    message: "Zbyt wiele plików w jednej zmianie — rozbij PR."
+
+  # Pierwszy tydzień: obserwujemy, nie blokujemy.
+  deps.new_package_count:
+    max: 3
+    on_violation: warn
+
+  # scope_map: raportuje, nie blokuje, dopóki mapa nie pokrywa całego repo
+  # (patrz `warn_only` niżej i policy/scope_map.yaml).
+  diff.out_of_scope_files:
+    max: 0
+    on_violation: review
+    message: "Zmiana dotyka plików spoza zadeklarowanego zakresu ticketu."
+
+  # Kamień 3, świeże bramki — progi zapisane od razu, egzekwowanie przez
+  # `warn_only` niżej, żeby nie blokować, zanim zbierzemy dane o fałszywych
+  # alarmach na tym repo.
+  static.high_severity_count:
+    max: 0
+    message: "Ruff/mypy zgłaszają defekt w zmienionych liniach (nie styl — realny błąd)."
+  sast.critical_count:
+    max: 0
+    message: "Reguła „nigdy” trafiła w zmienionych liniach — patrz rules/semgrep/never.yaml."
+  sca.vulnerable_package_count:
+    max: 0
+    message: "Nowo dodana zależność ma znaną podatność (pip-audit)."
+
+human_review_required_when:
+  - paths_match:
+      - "**/auth/**"
+      - "**/payments/**"
+      - "**/migrations/**"
+      - "infra/**"
+      - ".github/workflows/**"
+      - "policy/**"
+  - deps.new_external_package
+  - deps.too_young
+
+# Bramka, która się wywaliła, niczego nie udowodniła — domyślnie kieruje
+# zmianę do człowieka zamiast cicho ją przepuszczać.
+on_gate_error: review
+
+# Limit znalezisk w komentarzu do PR. Powyżej tej liczby zespół przestaje czytać.
+max_findings_reported: 10
+
+# Każda nowa bramka wchodzi tu na pierwszy tydzień: zbieramy statystyki
+# i dopiero potem włączamy blokowanie.
+warn_only:
+  - G2.cross_verify # USUŃ po tygodniu obserwacji i przeglądzie fałszywych alarmów
+  - G1.static # kamień 3, nowa — USUŃ po tygodniu obserwacji
+  - G3.sast # kamień 3, nowa — USUŃ po tygodniu obserwacji
+  - G3.sca # kamień 3, nowa — USUŃ po tygodniu obserwacji i sprawdzeniu limitu sieci w CI
+
+# Konfiguracja per bramka.
+gates:
+  G1.deps:
+    min_age_days: 90
+    internal_prefixes: []
+    allow_packages: []
+  G2.cross_verify:
+    python_path: ["src"] # katalogi dokładane do PYTHONPATH w kopii kodu bazowego
+    timeout_s: 600
+    pytest_args: []
+    # Bramka uruchamia testy z PR-a, czyli kod napisany przez agenta. Zmienne
+    # wyglądające na poświadczenia (TOKEN, SECRET, PASSWORD, *_KEY…) są z tego
+    # procesu usuwane. Tu wpisujesz te, których testy naprawdę potrzebują.
+    keep_env: []
+  G3.secrets:
+    require_tool: true
+  G1.static:
+    require_ruff: true # brak ruffa = błąd bramki
+    require_mypy: false # wiele repo nie ma mypy skonfigurowanego — brak to nie błąd
+    mypy_args: []
+    keep_env: []
+  G3.sast:
+    keep_env: []
+    # Limit narzucany samemu semgrepowi (`--max-memory`), nie sandboksowi —
+    # silnik OCaml segfaultuje pod twardym `ulimit -v` niezależnie od
+    # realnego zużycia (core/runner.py, gates/g3_sast.py).
+    max_memory_mb: 2000
+  G3.sca:
+    require_tool: true
+    # Jedyna bramka z dostępem do sieci — jeżeli CI biegnie w środowisku bez
+    # wyjścia do internetu, ustaw `require_tool: false`, żeby dostać `skipped`
+    # zamiast `error` na każdym PR-ze dodającym zależność.
+    keep_env: []

@@ -1,0 +1,21 @@
+# Mapowanie: prefiks ticketu → globy ścieżek, które ten komponent ma prawo
+# dotykać (TOOLS.md §2.2). Prefiks to część przed myślnikiem w numerze
+# ticketu, np. ticket `AUTH-123` ma prefiks `AUTH`.
+#
+# Brak wpisu dla prefiksu ticketu (albo brak ticketu w ogóle) → `scope-guard`
+# tylko raportuje fakty, nie blokuje niczego — dopóki mapowanie nie pokrywa
+# repozytorium, egzekwowanie zakresu byłoby zgadywanką.
+#
+# Pliki testowe są zawsze w zakresie niezależnie od tej listy — test do
+# zmienionego pliku jest oczywistym towarzyszem zmiany, nie wyjściem poza nią.
+#
+# To jest przykładowa treść do dostosowania pod realną strukturę repo —
+# usuń komponenty, których nie masz, dodaj swoje.
+components:
+  AUTH:
+    - "**/auth/**"
+  BILLING:
+    - "**/billing/**"
+  INFRA:
+    - "infra/**"
+    - ".github/workflows/**"

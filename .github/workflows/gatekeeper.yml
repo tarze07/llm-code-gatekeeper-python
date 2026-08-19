@@ -1,0 +1,91 @@
+name: gatekeeper
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# UWAGA: `pull_request` nie daje sekretów ani zapisu PR-om z forków — to
+# świadomy wybór. Dla forków trzeba rozdzielić przebieg na `pull_request`
+# (liczenie) i `workflow_run` (komentowanie). Dopóki repozytorium jest
+# wewnętrzne, ten prostszy wariant wystarcza.
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: gatekeeper-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # merge-base wymaga pełnej historii
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalacja bramy
+        run: pip install --quiet .
+
+      - name: Instalacja zależności testowych projektu i narzędzi bramek
+        # `dev` — zależności projektu (wymagane przez G2.cross_verify: bramka
+        # uruchamia testy z PR-a przeciw kodowi sprzed zmiany, bez nich
+        # zgłosi błąd zamiast cichego „przeszło"). `gates` — ruff/mypy/semgrep/
+        # pip-audit, których G1.static/G3.sast/G3.sca potrzebują jako
+        # podprocesów. Dostosuj komendę `dev` do swojego projektu.
+        run: pip install --quiet -e ".[dev,gates]"
+
+      - name: Instalacja gitleaksa
+        env:
+          GITLEAKS_VERSION: "8.21.2"
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Walidacja polityki
+        run: gatekeeper policy lint --policy policy/gates.yaml
+
+      - name: Uruchomienie bramek
+        id: gate
+        continue-on-error: true
+        run: |
+          gatekeeper run \
+            --base "origin/${{ github.base_ref }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --policy policy/gates.yaml \
+            --format markdown \
+            --output gatekeeper-report.md \
+            --json-report gatekeeper-report.json \
+            --fail-on block
+
+      - name: Artefakt z pełnym raportem
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gatekeeper-report
+          path: |
+            gatekeeper-report.md
+            gatekeeper-report.json
+          retention-days: 30
+
+      - name: Komentarz w PR (aktualizowany, nie mnożony)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: scripts/post_pr_comment.sh gatekeeper-report.md
+
+      - name: Decyzja
+        if: steps.gate.outcome == 'failure'
+        run: |
+          echo "::error::Brama jakości zablokowała zmianę — szczegóły w komentarzu do PR."
+          exit 1

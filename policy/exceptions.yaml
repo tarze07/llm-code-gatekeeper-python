@@ -1,0 +1,15 @@
+# Wyjątki od reguł bramy.
+#
+# Każdy wpis wymaga właściciela, powodu i daty wygaśnięcia (max 30 dni).
+# Wygasły wyjątek jest błędem walidacji polityki, nie cichym przepuszczeniem —
+# bez tego po pół roku polityka jest zbiorem wyjątków (PLAN.md §4).
+#
+# Przykład:
+# exceptions:
+#   - rule: deps.too_young
+#     owner: "@zespol-platforma"
+#     reason: "biblioteka klienta naszego wewnętrznego API, wydana 2 tygodnie temu"
+#     expires: 2026-09-01
+#     fingerprints: []   # opcjonalnie: zawęź wyjątek do konkretnych znalezisk
+
+exceptions: []

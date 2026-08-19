@@ -1,0 +1,2 @@
+/repo/Calc.cs(8,16): error CS0029: Cannot implicitly convert type 'string' to 'int' [/repo/Demo.csproj]
+/repo/Calc.cs(7,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/repo/Demo.csproj]

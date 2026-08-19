@@ -1,0 +1,12 @@
+# Granica bezpieczeństwa całego systemu: jeżeli oceniany może zmienić kryteria
+# oceny, reszta nie ma znaczenia (PLAN.md §4).
+#
+# Agenci LLM nie mają uprawnień do tych ścieżek. Wymaga włączenia
+# "Require review from Code Owners" w ochronie gałęzi — samo CODEOWNERS
+# niczego nie egzekwuje.
+
+/policy/              @wlasciciel-bramy
+/rules/               @wlasciciel-bramy
+/.github/workflows/   @wlasciciel-bramy
+/.github/CODEOWNERS   @wlasciciel-bramy
+/gatekeeper/          @wlasciciel-bramy
