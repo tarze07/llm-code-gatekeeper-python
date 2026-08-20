@@ -9,11 +9,13 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
 PYPI = "pypi"
 NPM = "npm"
+NUGET = "nuget"
 
 _PEP508_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 _REQ_OPTION = re.compile(r"^\s*-")
@@ -53,6 +55,12 @@ def manifest_kind(path: str) -> str | None:
         return "requirements"
     if name == "setup.py":
         return "setup.py"
+    if name.endswith((".csproj", ".fsproj")):
+        return "csproj"
+    if name == "Directory.Packages.props":
+        return "directory.packages.props"
+    if name == "packages.config":
+        return "packages.config"
     return None
 
 
@@ -64,6 +72,8 @@ def parse_manifest(path: str, content: str) -> set[Dependency]:
         return parse_requirements(content, path)
     if kind == "package.json":
         return parse_package_json(content, path)
+    if kind in ("csproj", "directory.packages.props", "packages.config"):
+        return parse_csproj_like(content, path)
     return set()
 
 
@@ -122,6 +132,51 @@ def parse_package_json(content: str, manifest: str = "package.json") -> set[Depe
                 continue
             out.add(Dependency(NPM, name, manifest, f"{name}@{spec}"))
     return out
+
+
+def parse_csproj_like(content: str, manifest: str = "app.csproj") -> set[Dependency]:
+    """`.csproj`/`.fsproj` (SDK-style), `Directory.Packages.props` (CPM),
+    `packages.config` (legacy) — trzy formaty, jedna gramatyka XML.
+
+    Wszystkie trzy używają atrybutu `Include`/`id` na nazwę i `Version`/
+    `version` na wersję, więc jeden przebieg po drzewie XML wystarcza —
+    nie trzeba rozróżniać formatu przed parsowaniem, tylko przy odczycie
+    atrybutów (camelCase w SDK-style vs. lowercase w `packages.config`).
+    """
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        return set()
+    out: set[Dependency] = set()
+    for el in root.iter():
+        tag = _local_tag(el.tag)
+        if tag in ("PackageReference", "PackageVersion"):
+            name = el.get("Include") or el.get("Update")
+            if not name:
+                continue
+            version = el.get("Version") or (el.findtext(_ns(el.tag, "Version")) or "")
+            out.add(Dependency(NUGET, name, manifest, f"{name}@{version}" if version else name))
+        elif tag == "package":
+            # packages.config: <package id="Newtonsoft.Json" version="13.0.3" .../>
+            name = el.get("id")
+            if not name:
+                continue
+            version = el.get("version") or ""
+            out.add(Dependency(NUGET, name, manifest, f"{name}@{version}" if version else name))
+    return out
+
+
+def _local_tag(tag: str) -> str:
+    """Nazwa elementu bez namespace'u — `.csproj` zwykle go nie ma, ale
+    projekty wygenerowane przez niektóre narzędzia go dodają."""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _ns(tag: str, local: str) -> str:
+    """Odtwarza namespace z tagu elementu nadrzędnego, dla `findtext` na dziecku."""
+    if "}" in tag:
+        return f"{tag.split('}')[0]}}}{local}"
+    return local
 
 
 def _add_pep508(out: set[Dependency], spec: str, manifest: str) -> None:

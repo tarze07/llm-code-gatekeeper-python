@@ -61,7 +61,10 @@
       "Bash(dotnet list *)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git commit -q -m 'chore: baseline snapshot before C#/TS support *)"
+      "Bash(git commit -q -m 'chore: baseline snapshot before C#/TS support *)",
+      "Bash(curl -s \"https://api.nuget.org/v3-flatcontainer/newtonsoft.json/index.json\")",
+      "Bash(curl -s \"https://api.nuget.org/v3/registration5-semver1/newtonsoft.json/index.json\")",
+      "Bash(curl -s \"https://azuresearch-usnc.nuget.org/query?q=&take=300&sortBy=totalDownloads-desc\")"
     ]
   }
 }

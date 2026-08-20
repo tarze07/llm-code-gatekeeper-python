@@ -19,7 +19,7 @@ import functools
 from dataclasses import dataclass
 from pathlib import Path
 
-from .manifests import NPM, PYPI, normalize
+from .manifests import NPM, NUGET, PYPI, normalize
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -85,7 +85,7 @@ def damerau_levenshtein(a: str, b: str, cutoff: int = 2) -> int:
 
 @functools.lru_cache(maxsize=4)
 def popular_packages(ecosystem: str) -> frozenset[str]:
-    filename = {PYPI: "top_pypi.txt", NPM: "top_npm.txt"}.get(ecosystem)
+    filename = {PYPI: "top_pypi.txt", NPM: "top_npm.txt", NUGET: "top_nuget.txt"}.get(ecosystem)
     if not filename:
         return frozenset()
     path = DATA_DIR / filename

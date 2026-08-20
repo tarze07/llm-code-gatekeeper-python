@@ -36,6 +36,14 @@ DEFAULT_GENERATED_GLOBS: tuple[str, ...] = (
     "**/__snapshots__/**",
     "**/vendor/**",
     "**/*.snap",
+    # .NET: katalogi budowania i kod generowany przez MSBuild/projektant —
+    # trafiają do diffa, gdy `.gitignore` repozytorium jest niepełny.
+    "**/bin/**",
+    "**/obj/**",
+    "**/*.designer.cs",
+    "**/*.AssemblyInfo.cs",
+    "**/*.g.cs",
+    "**/*.g.i.cs",
 )
 
 DEFAULT_TEST_GLOBS: tuple[str, ...] = (
@@ -49,6 +57,10 @@ DEFAULT_TEST_GLOBS: tuple[str, ...] = (
     "**/*.spec.[jt]s",
     "**/*.spec.[jt]sx",
     "**/*_test.go",
+    # .NET: konwencja nazewnicza xUnit/NUnit/MSTest (obok katalogowej
+    # `**/tests/**`/`**/test/**`, która już działa niezależnie od języka).
+    "**/*Tests.cs",
+    "**/*Test.cs",
 )
 
 _LANGUAGES = {
@@ -60,6 +72,7 @@ _LANGUAGES = {
     ".cjs": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
+    ".cs": "csharp",
     ".go": "go",
     ".rs": "rust",
     ".java": "java",

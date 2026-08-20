@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from .manifests import NPM, PYPI
+from .manifests import NPM, NUGET, PYPI
 
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "gatekeeper" / "registry"
 POSITIVE_TTL = 24 * 3600
@@ -206,9 +206,56 @@ class NpmRegistry(HttpRegistry):
         )
 
 
+class NuGetRegistry(HttpRegistry):
+    ecosystem = NUGET
+    #: Istnienie + lista wersji — endpoint jest tani i nie paginuje.
+    flat_container = "https://api.nuget.org/v3-flatcontainer"
+    #: Wiek pierwszego wydania i URL repozytorium — paginowany katalog.
+    registration = "https://api.nuget.org/v3/registration5-semver1"
+
+    #: Sentinel, którym NuGet oznacza wpisy bez prawdziwej daty publikacji
+    #: (głównie w połączeniu z `listed: false`). Licząc je jak zwykłą datę,
+    #: każdy pakiet z taką wersją wyglądałby na sto kilkadziesiąt lat stary —
+    #: czyli dokładnie odwrotnie niż powinien wyglądać świeżo ukryty pakiet.
+    _UNLISTED_YEAR = 1900
+
+    def _fetch_remote(self, name: str) -> PackageInfo:
+        id_lower = name.lower()
+        flat = self._get_json(f"{self.flat_container}/{id_lower}/index.json")
+        if flat is None or not flat.get("versions"):
+            return PackageInfo(self.ecosystem, name, exists=False)
+
+        published: list[datetime] = []
+        repo_url: str | None = None
+        index = self._get_json(f"{self.registration}/{id_lower}/index.json") or {}
+        for page in index.get("items") or []:
+            items = page.get("items")
+            if items is None:
+                # Katalog dla pakietów z wieloma wersjami nie zawsze inline'uje
+                # stronę — trzeba ją dociągnąć osobno (kwirk API NuGeta).
+                page_id = page.get("@id")
+                items = ((self._get_json(page_id) or {}).get("items") or []) if page_id else []
+            for item in items:
+                entry = item.get("catalogEntry") or {}
+                parsed = _parse_time(entry.get("published"))
+                if parsed and parsed.year > self._UNLISTED_YEAR:
+                    published.append(parsed)
+                if not repo_url:
+                    repo_url = entry.get("projectUrl") or None
+
+        return PackageInfo(
+            ecosystem=self.ecosystem,
+            name=name,
+            exists=True,
+            first_release=min(published) if published else None,
+            latest_release=max(published) if published else None,
+            repo_url=repo_url,
+        )
+
+
 def default_registries(cache_dir: Path | None = None) -> dict[str, Registry]:
     cache = DiskCache(cache_dir)
-    return {PYPI: PyPIRegistry(cache), NPM: NpmRegistry(cache)}
+    return {PYPI: PyPIRegistry(cache), NPM: NpmRegistry(cache), NUGET: NuGetRegistry(cache)}
 
 
 def _parse_time(value: str | None) -> datetime | None:
