@@ -11,6 +11,7 @@ zgłasza to jawnie, a polityka decyduje, czy to blokuje.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -143,6 +144,62 @@ def parse_sarif(
                     evidence={"snippet": f"{rule_id}:{message}", "level": level},
                 )
             )
+    return findings
+
+
+# --------------------------------------------------------------------------
+# Diagnostyka kompilatora — format, którym mówi zarówno tsc, jak i MSBuild
+# (`dotnet build`): `plik(linia,kolumna): poziom KODxxxx: treść [projekt]`.
+# Żadne z tych dwóch narzędzi nie ma trybu JSON, więc to jest format
+# pośredni analogiczny do SARIF-a dla tej rodziny narzędzi.
+# --------------------------------------------------------------------------
+
+_COMPILER_DIAGNOSTIC_RE = re.compile(
+    r"^(?P<file>.+?)\((?P<line>\d+),(?P<col>\d+)\):\s*"
+    r"(?P<level>error|warning)\s+(?P<code>[A-Za-z]+\d+):\s*"
+    r"(?P<message>.*?)"
+    r"(?:\s*\[(?P<project>[^\[\]]+)\])?$"
+)
+
+
+def parse_compiler_diagnostics(
+    payload: str,
+    repo: Path,
+    gate: str,
+    rule_prefix: str,
+    scenario: Callable[[str, str, str], str],
+    severity_of: Callable[[str, str], Severity] | None = None,
+) -> list[Finding]:
+    """`tsc --noEmit --pretty false` / `dotnet build -v quiet` → `Finding`.
+
+    Jedna linia = jedna diagnostyka; linie, które nie pasują do formatu
+    (postęp budowania, podsumowanie, puste linie), są po cichu pomijane —
+    tak samo jak `parse_mypy` pomija śmieci przed właściwym JSON Lines.
+    """
+    findings: list[Finding] = []
+    for line in payload.splitlines():
+        match = _COMPILER_DIAGNOSTIC_RE.match(line.strip())
+        if not match:
+            continue
+        level = match.group("level")
+        code = match.group("code")
+        message = match.group("message").strip()
+        file = relative_to_repo(match.group("file").strip(), repo)
+        severity = (
+            severity_of(level, code) if severity_of else SARIF_LEVELS.get(level, Severity.MEDIUM)
+        )
+        findings.append(
+            Finding(
+                gate=gate,
+                rule_id=f"{rule_prefix}.{code}",
+                severity=severity,
+                title=message,
+                failure_scenario=scenario(level, code, message),
+                file=file,
+                line=int(match.group("line")),
+                evidence={"snippet": f"{code}:{message}", "level": level},
+            )
+        )
     return findings
 
 

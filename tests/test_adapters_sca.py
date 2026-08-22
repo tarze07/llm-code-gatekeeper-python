@@ -1,21 +1,24 @@
-"""Testy adaptera pip-audit na zapisanych próbkach prawdziwego wyjścia.
+"""Testy adapterów SCA na zapisanych próbkach prawdziwego wyjścia.
 
-Próbki pochodzą z realnego `pip-audit -f json -r requirements.txt` na
-`urllib3==1.26.4` + `requests==2.31.0` (podatne) i `six==1.16.0` (czyste).
-Opisy podatności są przycięte — parser ich nie czyta — ale kształt JSON-a,
-w tym udokumentowany kwirk pip-audit (ten sam `id` potrafi wystąpić w
-`vulns` dwa razy, raz z każdego źródła), jest nietknięty.
+Próbki pip-audit pochodzą z realnego `pip-audit -f json -r requirements.txt`
+na `urllib3==1.26.4` + `requests==2.31.0` (podatne) i `six==1.16.0` (czyste).
+Próbka npm audit pochodzi z realnego `npm audit --json` na `request@2.88.2`
+(łańcuch zależności z wieloma podatnościami, w tym `via` mieszające obiekty
+advisory ze stringami nazw pakietów tranzytywnych — dokładnie ten przypadek,
+którego parser musi pilnować). Opisy podatności są przycięte tam, gdzie
+parser ich nie czyta, ale kształt JSON-a jest nietknięty.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from gatekeeper.adapters.sca import parse_pip_audit
+from gatekeeper.adapters.sca import parse_npm_audit, parse_pip_audit
 from gatekeeper.core.finding import Severity
 
 VULNERABLE = Path(__file__).parent / "data" / "pip_audit_vulnerable.json"
 CLEAN = Path(__file__).parent / "data" / "pip_audit_clean.json"
+NPM_VULNERABLE = Path(__file__).parent / "data" / "npm_audit_vulnerable.json"
 
 
 def test_parsowanie_pip_audit_golden_file_filtruje_do_nowych_pakietow():
@@ -61,3 +64,43 @@ def test_pip_audit_normalizuje_wielkosc_liter_pakietu():
     assert findings == []
     findings = parse_pip_audit(payload, "requirements.txt", {"SIX"}, "G3.sca")
     assert findings == []  # "SIX" != znormalizowane "six" -> po prostu nie pasuje, nie wybucha
+
+
+# --------------------------------------------------------------- npm audit
+
+
+def test_parsowanie_npm_audit_golden_file_filtruje_do_nowych_pakietow():
+    """`request` jest jedynym pakietem, który ten (hipotetyczny) PR dodaje —
+    reszta (`form-data`, `qs`, `tough-cookie`, `uuid`) to tranzytywny dług,
+    audytowany przez npm razem z nim, ale nie wprowadzony przez ten PR."""
+    payload = NPM_VULNERABLE.read_text(encoding="utf-8")
+    findings = parse_npm_audit(payload, {"request"}, "G3.sca")
+
+    assert len(findings) == 1
+    assert findings[0].evidence["package"] == "request"
+    assert findings[0].rule_id == "sca.1096727"
+    assert findings[0].severity == Severity.HIGH
+
+
+def test_npm_audit_pomija_wpisy_via_ktore_sa_nazwami_pakietow():
+    """`request`'s `via` miesza jeden obiekt advisory z czterema stringami
+    (nazwy pakietów tranzytywnych) — te drugie nie mają prawa stać się
+    czterema fałszywymi znaleziskami dla samego `request`."""
+    payload = NPM_VULNERABLE.read_text(encoding="utf-8")
+    findings = parse_npm_audit(payload, {"request"}, "G3.sca")
+    assert len(findings) == 1  # nie 5
+
+
+def test_npm_audit_wielu_nowych_pakietow_golden_file():
+    payload = NPM_VULNERABLE.read_text(encoding="utf-8")
+    findings = parse_npm_audit(
+        payload, {"request", "form-data", "qs", "tough-cookie", "uuid"}, "G3.sca"
+    )
+    packages = {f.evidence["package"] for f in findings}
+    assert packages == {"request", "form-data", "qs", "tough-cookie", "uuid"}
+    assert len(findings) == 6  # form-data ma dwa advisory we `via`
+
+
+def test_pusty_raport_npm_audit_nie_wywraca_adaptera():
+    assert parse_npm_audit("", {"x"}, "G3.sca") == []
+    assert parse_npm_audit('{"vulnerabilities": {}}', set(), "G3.sca") == []
