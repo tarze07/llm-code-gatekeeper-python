@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from gatekeeper.core.change import ChangeContext
-from gatekeeper.deps.manifests import NPM, PYPI
+from gatekeeper.deps.manifests import NPM, NUGET, PYPI
 from gatekeeper.deps.registries import RegistryUnavailable
 from gatekeeper.gates.g1_deps import DepGuard
 from tests.conftest import FakeRegistry
@@ -13,6 +13,13 @@ KNOWN = {
     "httpx": {"age_days": 2000},
     "fastapi": {"age_days": 2500},
 }
+
+NUGET_CSPROJ = """<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>{deps}</ItemGroup></Project>"""
+
+
+def csproj(*names: str) -> str:
+    refs = "".join(f'<PackageReference Include="{n}" Version="1.0.0" />' for n in names)
+    return NUGET_CSPROJ.format(deps=refs)
 
 
 def build(repo, before: str, after: str, filename: str = "pyproject.toml") -> ChangeContext:
@@ -24,12 +31,13 @@ def build(repo, before: str, after: str, filename: str = "pyproject.toml") -> Ch
     return ChangeContext.from_git(repo.path, "main", "HEAD")
 
 
-def gate(packages: dict | None = None, **config) -> DepGuard:
+def gate(packages: dict | None = None, nuget_packages: dict | None = None, **config) -> DepGuard:
     return DepGuard(
         config or {},
         registries={
             PYPI: FakeRegistry(PYPI, packages if packages is not None else KNOWN),
             NPM: FakeRegistry(NPM, {}),
+            NUGET: FakeRegistry(NUGET, nuget_packages or {}),
         },
     )
 
@@ -124,6 +132,69 @@ def test_requirements_txt_tez_jest_obslugiwany(repo):
     change = build(repo, "requests==2.31.0\n", "requests==2.31.0\nzmyslony-pakiet==1.0\n",
                    filename="requirements.txt")
     result = gate().run(change)
+
+    assert result.facts["deps.unknown_package"] is True
+
+
+# -------------------------------------------------------------------- nuget
+
+
+def test_halucynowany_pakiet_nuget_jest_blokowany(repo):
+    repo.write("Demo.csproj", csproj("Newtonsoft.Json"))
+    repo.commit("baza")
+    repo.checkout("feature", create=True)
+    repo.write("Demo.csproj", csproj("Newtonsoft.Json", "Halucynowany.Pakiet.Ktorego.Nie.Ma"))
+    repo.commit("feat: nowy pakiet NuGet")
+    change = ChangeContext.from_git(repo.path, "main", "HEAD")
+
+    result = gate(nuget_packages={"newtonsoft.json": {"age_days": 4000}}).run(change)
+
+    assert result.status == "fail"
+    assert result.facts["deps.unknown_package"] is True
+    finding = next(f for f in result.findings if f.rule_id == "deps.unknown_package")
+    assert "Halucynowany.Pakiet.Ktorego.Nie.Ma" in finding.title
+    assert finding.file == "Demo.csproj"
+
+
+def test_mlody_pakiet_nuget_daje_znalezisko_high(repo):
+    repo.write("Demo.csproj", csproj("Newtonsoft.Json"))
+    repo.commit("baza")
+    repo.checkout("feature", create=True)
+    repo.write("Demo.csproj", csproj("Newtonsoft.Json", "Brand.New.Lib"))
+    repo.commit("feat: mlody pakiet NuGet")
+    change = ChangeContext.from_git(repo.path, "main", "HEAD")
+
+    result = gate(
+        nuget_packages={
+            "newtonsoft.json": {"age_days": 4000},
+            "brand.new.lib": {"age_days": 10},
+        }
+    ).run(change)
+
+    assert result.facts["deps.too_young"] is True
+    finding = next(f for f in result.findings if f.rule_id == "deps.too_young")
+    assert finding.severity == "high"
+
+
+def test_directory_packages_props_jest_obslugiwany(repo):
+    props = '<Project><ItemGroup>{deps}</ItemGroup></Project>'
+    repo.write(
+        "Directory.Packages.props",
+        props.format(deps='<PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />'),
+    )
+    repo.commit("baza")
+    repo.checkout("feature", create=True)
+    repo.write(
+        "Directory.Packages.props",
+        props.format(
+            deps='<PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />'
+            '<PackageVersion Include="Nieznany.Pakiet" Version="1.0.0" />'
+        ),
+    )
+    repo.commit("feat: cpm")
+    change = ChangeContext.from_git(repo.path, "main", "HEAD")
+
+    result = gate(nuget_packages={"newtonsoft.json": {"age_days": 4000}}).run(change)
 
     assert result.facts["deps.unknown_package"] is True
 

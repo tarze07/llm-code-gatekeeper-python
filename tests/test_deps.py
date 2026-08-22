@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from gatekeeper.deps import manifests, typosquat
-from gatekeeper.deps.manifests import NPM, PYPI, Dependency
+from gatekeeper.deps.manifests import NPM, NUGET, PYPI, Dependency
 
 PYPROJECT = """
 [project]
@@ -44,6 +44,30 @@ PACKAGE_JSON = """
 }
 """
 
+CSPROJ = """<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+  </ItemGroup>
+</Project>
+"""
+
+DIRECTORY_PACKAGES_PROPS = """<Project>
+  <ItemGroup>
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>
+"""
+
+PACKAGES_CONFIG = """<?xml version="1.0" encoding="utf-8"?>
+<packages>
+  <package id="Newtonsoft.Json" version="13.0.3" targetFramework="net472" />
+</packages>
+"""
+
 
 def names(deps: set[Dependency]) -> set[str]:
     return {d.name for d in deps}
@@ -78,6 +102,38 @@ def test_parsowanie_package_json_pomija_zaleznosci_lokalne():
         "@babel/core",
         "vitest",
     }
+
+
+def test_parsowanie_csproj_sdk_style():
+    deps = manifests.parse_csproj_like(CSPROJ, "Demo.csproj")
+    assert names(deps) == {"Newtonsoft.Json", "Serilog"}
+    assert all(d.ecosystem == NUGET for d in deps)
+
+
+def test_parsowanie_directory_packages_props():
+    deps = manifests.parse_csproj_like(DIRECTORY_PACKAGES_PROPS, "Directory.Packages.props")
+    assert names(deps) == {"Newtonsoft.Json"}
+
+
+def test_parsowanie_packages_config_legacy():
+    deps = manifests.parse_csproj_like(PACKAGES_CONFIG, "packages.config")
+    assert names(deps) == {"Newtonsoft.Json"}
+
+
+def test_csproj_niepoprawny_xml_zwraca_pusty_zbior():
+    assert manifests.parse_csproj_like("<not valid xml", "Demo.csproj") == set()
+
+
+def test_manifest_kind_rozpoznaje_pliki_dotnet():
+    assert manifests.manifest_kind("Demo.csproj") == "csproj"
+    assert manifests.manifest_kind("Demo.fsproj") == "csproj"
+    assert manifests.manifest_kind("Directory.Packages.props") == "directory.packages.props"
+    assert manifests.manifest_kind("packages.config") == "packages.config"
+
+
+def test_parse_manifest_dispatchuje_do_csproj():
+    deps = manifests.parse_manifest("Demo.csproj", CSPROJ)
+    assert {d.ecosystem for d in deps} == {NUGET}
 
 
 def test_normalizacja_pep503_uznaje_nazwy_za_rownowazne():
@@ -132,6 +188,16 @@ def test_krotkie_nazwy_maja_wezszy_prog():
 def test_wykrywanie_typosquatow_npm():
     hits = [n.candidate for n in typosquat.nearest_popular(NPM, "loadash")]
     assert "lodash" in hits
+
+
+def test_wykrywanie_typosquatow_nuget():
+    hits = [n.candidate for n in typosquat.nearest_popular(NUGET, "Newtonsoft.Jsonn")]
+    assert "newtonsoft.json" in hits
+
+
+@pytest.mark.parametrize("name", ["Newtonsoft.Json", "Serilog", "AutoMapper", "Dapper"])
+def test_popularne_pakiety_nuget_nie_sa_zglaszane(name):
+    assert typosquat.nearest_popular(NUGET, name) == []
 
 
 @pytest.mark.parametrize(
