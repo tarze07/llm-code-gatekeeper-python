@@ -37,7 +37,10 @@ from .runner import describe_isolation
 #: dowód, że zmiana jest bezpieczna (PLAN.md §9).
 NOT_CHECKED = [
     "pokrycie różnicowe i testy mutacyjne (G2) — kamień 4",
-    "podatności w zależnościach (SCA), IaC i licencje — kamień 3 w toku",
+    "G2.cross_verify (nowe testy przeciw kodowi sprzed zmiany) — tylko Python; "
+    "adapter TS/JS (vitest/jest) i C# (dotnet test) w planie",
+    "IaC i licencje (G3) — kamień 3 w toku; SCA sam w sobie obejmuje "
+    "PyPI/npm/NuGet, poza tym zakresem zależności to jeszcze dług",
     "review semantyczny LLM (G4) — kamień 5",
     "gotowość wdrożeniowa: migracje, rollback, obserwowalność (G6) — kamień 6",
 ]

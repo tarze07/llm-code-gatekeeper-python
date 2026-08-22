@@ -139,6 +139,131 @@ rules:
       - pattern-not: '<$EL dangerouslySetInnerHTML={{ __html: $SANI.sanitize(...) }} ... />'
       - pattern-not: '<$EL dangerouslySetInnerHTML={{ __html: sanitizeHtml(...) }} ... />'
 
+  - id: no-eval-on-input-js
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Dynamiczne wykonanie kodu na danych z zewnątrz.
+    metadata:
+      cwe: "CWE-95: Eval Injection"
+      failure_scenario: >-
+        Wejście sterujące trafia do interpretera JS-a, więc wartość taka jak
+        `fetch(...).then(r=>r.json())` podmieniona na złośliwy string wykona
+        dowolny kod z uprawnieniami procesu (Node) albo sesji (przeglądarka).
+        Osobna reguła od Pythona: `exec` w Node-owym `child_process` to zupełnie
+        inna funkcja (uruchamia proces, nie interpretuje kodu) i nie ma prawa
+        trafić w tę samą regułę, co realny `eval`/`new Function`.
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+      - pattern-not: eval("...")
+
+  - id: no-shell-true-js
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Uruchomienie polecenia powłoki z interpolacją danych.
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      failure_scenario: >-
+        `child_process.exec`/`execSync` przepuszczają cały string przez powłokę,
+        więc wartość `plik.txt; rm -rf /` w interpolowanym argumencie uruchomi
+        drugie polecenie. `execFile`/`spawn` z argumentami jako tablicą (bez
+        powłoki) nie mają tej podatności — stąd `pattern-not` niżej.
+    patterns:
+      - pattern-either:
+          - pattern: $CP.exec(`...${$X}...`, ...)
+          - pattern: $CP.exec("..." + $X, ...)
+          - pattern: $CP.execSync(`...${$X}...`, ...)
+          - pattern: $CP.execSync("..." + $X, ...)
+
+  - id: no-tls-verify-disabled-js
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Wyłączona weryfikacja certyfikatu TLS.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      failure_scenario: >-
+        Połączenie przyjmie dowolny certyfikat, więc każdy, kto potrafi wpiąć
+        się w ruch, odczyta i podmieni przesyłane dane — awaria jest niewidoczna
+        aż do momentu ataku, tak samo jak przy `verify=False` w Pythonie.
+    patterns:
+      - pattern-either:
+          - pattern: "{rejectUnauthorized: false, ...}"
+          - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
+  - id: no-tls-verify-disabled-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Wyłączona weryfikacja certyfikatu TLS.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      failure_scenario: >-
+        Callback zawsze zwraca `true` niezależnie od błędów łańcucha certyfikatów,
+        więc połączenie przyjmie dowolny certyfikat — atak man-in-the-middle jest
+        niewidoczny dla aplikacji aż do wycieku albo podmiany danych.
+    patterns:
+      - pattern-either:
+          - pattern: $SPM.ServerCertificateValidationCallback = (...) => true;
+          - pattern: $HANDLER.ServerCertificateCustomValidationCallback = (...) => true;
+
+  - id: no-sql-string-concat-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Zapytanie SQL budowane przez sklejanie stringów.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      failure_scenario: >-
+        Wartość z wejścia staje się częścią składni zapytania, więc dane w rodzaju
+        `1; DROP TABLE Users; --` zmienią jego znaczenie. Użyj sparametryzowanego
+        zapytania (`cmd.Parameters.AddWithValue(...)`).
+    patterns:
+      - pattern-either:
+          - pattern: new SqlCommand($X + $Y, ...)
+          - pattern: new SqlCommand($"...{$X}...", ...)
+
+  - id: no-shell-true-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Uruchomienie procesu z interpolowanymi argumentami powłoki.
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      failure_scenario: >-
+        Argumenty budowane przez interpolację/konkatenację trafiają do procesu
+        powłoki, więc wartość `plik.txt & del /f *` w danych wejściowych uruchomi
+        dodatkowe polecenie. Użyj `ProcessStartInfo.ArgumentList` (lista, nie string).
+    patterns:
+      - pattern-either:
+          - pattern: Process.Start($"...{$X}...")
+          - pattern: |
+              new ProcessStartInfo(...) { Arguments = $"...{$X}...", ... }
+
+  - id: no-unsafe-deserialization-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Deserializacja niezaufanych danych.
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      failure_scenario: >-
+        `BinaryFormatter` i pokrewne formatery (.NET oficjalnie odradza ich użycie)
+        wykonują kod zapisany w strumieniu podczas jego wczytywania — plik z sieci
+        albo z cache staje się wtedy wykonywalnym programem. Użyj `System.Text.Json`
+        albo `DataContractSerializer` z listą dozwolonych typów.
+    patterns:
+      - pattern-either:
+          - pattern: new BinaryFormatter(...).Deserialize(...)
+          - pattern: new NetDataContractSerializer(...).Deserialize(...)
+          - pattern: new LosFormatter(...).Deserialize(...)
+          - pattern: new ObjectStateFormatter(...).Deserialize(...)
+          - pattern: new SoapFormatter(...).Deserialize(...)
+          - pattern: |
+              BinaryFormatter $F = ...;
+              ...
+              $F.Deserialize(...)
+          - pattern: |
+              var $F = new BinaryFormatter(...);
+              ...
+              $F.Deserialize(...)
+
   - id: no-wildcard-iam-policy
     languages: [json, yaml]
     severity: ERROR

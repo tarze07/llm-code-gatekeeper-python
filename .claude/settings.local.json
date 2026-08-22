@@ -64,7 +64,8 @@
       "Bash(git commit -q -m 'chore: baseline snapshot before C#/TS support *)",
       "Bash(curl -s \"https://api.nuget.org/v3-flatcontainer/newtonsoft.json/index.json\")",
       "Bash(curl -s \"https://api.nuget.org/v3/registration5-semver1/newtonsoft.json/index.json\")",
-      "Bash(curl -s \"https://azuresearch-usnc.nuget.org/query?q=&take=300&sortBy=totalDownloads-desc\")"
+      "Bash(curl -s \"https://azuresearch-usnc.nuget.org/query?q=&take=300&sortBy=totalDownloads-desc\")",
+      "Bash(git commit -q -m 'feat\\(sast\\): reguly '\\\\''nigdy'\\\\'' dla C# i rozszerzenie TS/JS *)"
     ]
   }
 }
