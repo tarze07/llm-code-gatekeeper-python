@@ -22,6 +22,16 @@ cases:
       verdict: BLOCK
       blocking_rules: [deps.unknown_package]
 
+  - name: halucynowany-pakiet-npm
+    description: >-
+      Ten sam defekt co `halucynowany-pakiet`, ale w ekosystemie npm —
+      dowód, że dep-guard nie jest zawężony do PyPI (kamień 3, pełny
+      parytet G0-G3 dla TS/JS). Musi blokować.
+    fixture: halucynowany-pakiet-npm
+    expect:
+      verdict: BLOCK
+      blocking_rules: [deps.unknown_package]
+
   - name: czysty-pr
     description: >-
       Mały, poprawny PR bez żadnych defektów. Zero fałszywych alarmów —

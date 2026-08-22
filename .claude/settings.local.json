@@ -66,7 +66,9 @@
       "Bash(curl -s \"https://api.nuget.org/v3/registration5-semver1/newtonsoft.json/index.json\")",
       "Bash(curl -s \"https://azuresearch-usnc.nuget.org/query?q=&take=300&sortBy=totalDownloads-desc\")",
       "Bash(git commit -q -m 'feat\\(sast\\): reguly '\\\\''nigdy'\\\\'' dla C# i rozszerzenie TS/JS *)",
-      "Bash(git commit -q -m 'docs+ci: dokumentacja i CI dla C#/TS *)"
+      "Bash(git commit -q -m 'docs+ci: dokumentacja i CI dla C#/TS *)",
+      "Bash(curl *)",
+      "Bash(git commit -q -m 'test\\(calibration\\): fixture halucynowany-pakiet-npm *)"
     ]
   }
 }

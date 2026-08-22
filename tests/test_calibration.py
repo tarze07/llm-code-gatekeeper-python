@@ -41,6 +41,7 @@ def test_wczytywanie_prawdziwego_pliku_cases_yaml():
     cases = load_cases(Path("calibration/cases.yaml"))
     assert {c.name for c in cases} == {
         "halucynowany-pakiet",
+        "halucynowany-pakiet-npm",
         "czysty-pr",
         "eval-na-wejsciu",
         "diff-zbyt-duzy",
