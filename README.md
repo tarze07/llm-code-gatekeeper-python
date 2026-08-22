@@ -41,20 +41,22 @@ Zbudowane są **kamienie 1–3** z [TOOLS.md](TOOLS.md) — koniec fazy 1 z PLAN
 | `gatekeeper/calibration.py` | zestaw kalibracyjny — celowo zepsute/czyste PR-y jako `calibration/cases.yaml` + `calibration/fixtures/` |
 | `G0.scope` | rozmiar i higiena zakresu; `scope_map.yaml` — ticket → dozwolone ścieżki |
 | `G0.provenance` | model/agent/sesja z trailerów commitów — dane pod „defekty per model" |
-| `G1.deps` | nowe zależności: istnienie w rejestrze, wiek, typosquat/slopsquat |
-| `G1.static` | ruff + mypy na zmienionych liniach — łapie halucynacje API |
-| `G2.cross_verify` | nowe testy uruchomione przeciw kodowi **sprzed** zmiany — wykrywa testy, które niczego nie dowodzą |
+| `G1.deps` | nowe zależności: istnienie w rejestrze, wiek, typosquat/slopsquat — PyPI, npm, **NuGet** |
+| `G1.static` | Python: ruff + mypy · TS/JS: tsc + eslint · **C#: `dotnet build`** — na zmienionych liniach, łapie halucynacje API |
+| `G2.cross_verify` | nowe testy uruchomione przeciw kodowi **sprzed** zmiany — wykrywa testy, które niczego nie dowodzą (**tylko Python**) |
 | `G3.secrets` | gitleaks; sekret w diffie blokuje, zastany idzie do długu |
-| `G3.sast` | reguły „nigdy" (`rules/semgrep/`) na zmienionych liniach — TLS, eval, SQLi, `shell=True`, deserializacja, IAM |
-| `G3.sca` | pip-audit na nowo dodanych zależnościach PyPI (jedyna bramka z dostępem do sieci) |
+| `G3.sast` | reguły „nigdy" (`rules/semgrep/`) na zmienionych liniach — TLS, eval, SQLi, `shell=True`/`Process.Start`, deserializacja, IAM — Python, TS/JS, **C#** |
+| `G3.sca` | pip-audit (PyPI), npm audit (npm), **`dotnet list package --vulnerable` (NuGet)** — na nowo dodanych zależnościach; jedyna bramka z dostępem do sieci |
 
-Nie sprawdza jeszcze: pokrycia różnicowego i mutacji (reszta G2), IaC/licencje i SCA poza PyPI (reszta G3), G4 (panel LLM), G6. Brama wypisuje tę listę w każdym raporcie.
+Nie sprawdza jeszcze: pokrycia różnicowego i mutacji (reszta G2), weryfikacji krzyżowej testów dla TS/JS/C# (adapter vitest/jest/`dotnet test` — reszta G2), IaC/licencje (reszta G3), G4 (panel LLM), G6. Brama wypisuje tę listę w każdym raporcie.
 
 ## Szybki start
 
 ```bash
 pip install -e ".[dev,gates]"   # dev: pytest; gates: ruff, mypy, semgrep, pip-audit
 # gitleaks instaluje się osobno (binarka Go, nie pakiet pip) — patrz USAGE.md
+# TS/JS (tsc, eslint) i C# (dotnet) też instalują się osobno — narzędzia
+# projektu ocenianego, nie zależności samej bramy; patrz USAGE.md
 
 gatekeeper policy lint --policy policy/gates.yaml
 gatekeeper run --repo /ścieżka/do/repo --base origin/main

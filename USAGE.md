@@ -62,7 +62,21 @@ sudo tar -xzf /tmp/gl.tar.gz -C /usr/local/bin gitleaks
 gitleaks version
 ```
 
-**Brakującego narzędzia brama nie udaje, że nie ma.** Bramka, której narzędzia zabrakło, zgłosi `error`, a decyzja poleci do `PASS-WITH-REVIEW` z jawnym powodem — brak dowodu to nie jest to samo co dowód braku problemu. Wyjątek: `G1.static`/mypy jest domyślnie opcjonalny (`require_mypy: false` w `gates.yaml`) — wiele repo nie ma go skonfigurowanego i to nie jest defekt.
+Projekt w TS/JS albo C# potrzebuje własnych narzędzi — to narzędzia **ocenianego
+projektu**, nie samej bramy, więc nie ma ich w `[gates]`:
+
+```bash
+# TS/JS: najlepiej jako devDependency projektu (bramka woła najpierw
+# node_modules/.bin/tsc|eslint, dopiero potem szuka globalnej binarki)
+cd ~/moj-projekt && npm i -D typescript eslint
+
+# C#: .NET SDK w PATH; bramka zakłada, że `dotnet restore` już się odbył
+# (sama nie ściąga pakietów — to jedyne miejsce w G1 z dostępem do sieci,
+# którego świadomie nie chcemy)
+dotnet --version
+```
+
+**Brakującego narzędzia brama nie udaje, że nie ma.** Bramka, której narzędzia zabrakło, zgłosi `error`, a decyzja poleci do `PASS-WITH-REVIEW` z jawnym powodem — brak dowodu to nie jest to samo co dowód braku problemu. Wyjątek: `G1.static`/mypy, tsc, eslint i `dotnet build` są domyślnie opcjonalne (`require_mypy`/`require_tsc`/`require_eslint`/`require_dotnet_build: false` w `gates.yaml`) — wiele repo nie ma ich skonfigurowanych i to nie jest defekt; brama wtedy po prostu pomija ten język bez wołania narzędzia (`tsconfig.json`/config eslinta/`.csproj` musi w ogóle istnieć, inaczej i tak nie ma czego sprawdzać).
 
 Nie musisz mieć wszystkiego naraz — `gatekeeper run --gate G1.deps` uruchamia tylko wskazane bramki.
 
@@ -622,7 +636,7 @@ Pojęcia, które wracają w raportach i w polityce.
 |---|---|---|
 | `gitleaks niedostępny` | brak binarki w `PATH` | krok 2 albo `gates: {G3.secrets: {require_tool: false}}` |
 | `polityka: [Errno 2] ... policy/gates.yaml` | uruchamiasz spoza katalogu projektu albo brak skopiowanej polityki | krok 4 albo `--policy /pełna/ścieżka/gates.yaml` |
-| `rejestr pakietów nieosiągalny` | brak sieci lub limit zapytań PyPI/npm | bramka celowo daje `error`, nie „przeszło" — powtórz przebieg |
+| `rejestr pakietów nieosiągalny` | brak sieci lub limit zapytań PyPI/npm/NuGet | bramka celowo daje `error`, nie „przeszło" — powtórz przebieg |
 | `pytest nie jest zainstalowany w tym środowisku` | `G2.cross_verify` nie ma czym uruchomić testów | zainstaluj zależności testowe projektu w tym samym środowisku |
 | `moduł X importuje się z …, spoza kopii kodu bazowego` | pakiet zainstalowany przez `pip install -e .` przesłania kod bazowy | uruchom bramę w środowisku bez takiej instalacji albo ustaw `python_path` w polityce |
 | `reguła odwołuje się do faktu … którego nie deklaruje żadna bramka` | literówka w `gates.yaml` | `gatekeeper policy facts` i popraw nazwę |
@@ -639,15 +653,20 @@ Pojęcia, które wracają w raportach i w polityce.
 **Czy muszę mieć testy, żeby to uruchomić?**
 Nie. Bez testów `G2.cross_verify` po prostu się pomija, a pozostałe trzy bramki działają normalnie. Brak testów wykryje dopiero pokrycie różnicowe (kamień 4).
 
-**Działa dla JavaScriptu i TypeScriptu?**
-Częściowo, i warto to wiedzieć zawczasu:
+**Działa dla JavaScriptu, TypeScriptu i C#?**
+Tak dla G0–G3, z jednym świadomym wyjątkiem — i warto to wiedzieć zawczasu:
 
-| Bramka | JS/TS |
-|---|---|
-| `G0.scope` | tak — niezależna od języka |
-| `G1.deps` | tak — czyta `package.json` i pyta rejestr npm |
-| `G3.secrets` | tak — gitleaks jest niezależny od języka |
-| `G2.cross_verify` | **nie** — dziś tylko Python/pytest. Adapter dla vitest/jest jest w planie kamienia 4 |
+| Bramka | TS/JS | C# |
+|---|---|---|
+| `G0.scope` | tak — niezależna od języka | tak — niezależna od języka |
+| `G1.deps` | tak — czyta `package.json`, pyta rejestr npm | tak — czyta `.csproj`/`Directory.Packages.props`/`packages.config`, pyta rejestr NuGet |
+| `G1.static` | tak — `tsc --noEmit` (wymaga `tsconfig.json`) + `eslint` (wymaga configu) | tak — `dotnet build` (kompilator *jest* kontrolą typów w trybie strict) |
+| `G3.secrets` | tak — gitleaks jest niezależny od języka | tak — gitleaks jest niezależny od języka |
+| `G3.sast` | tak — reguły „nigdy” dla eval/shell-injection/TLS (`rules/semgrep/never.yaml`) | tak — reguły „nigdy” dla TLS/SQLi/shell-injection/deserializacji |
+| `G3.sca` | tak — `npm audit` na nowo dodanych zależnościach | tak — `dotnet list package --vulnerable` na nowo dodanych zależnościach |
+| `G2.cross_verify` | **nie** — dziś tylko Python/pytest. Adapter dla vitest/jest w planie | **nie** — dziś tylko Python/pytest. Adapter dla `dotnet test` w planie |
+
+`G1.static` pomija język cicho (status `pass`, bez wołania narzędzia), gdy w repo brakuje configu, którego to narzędzie wymaga — `tsconfig.json` dla tsc, `.eslintrc*`/`eslint.config.*` dla eslinta, `.csproj` dla `dotnet build`. To nie jest defekt, tylko brak przedmiotu do sprawdzenia; fakty `static.tsconfig_found`/`static.eslint_config_found`/`static.csproj_found` mówią wprost, co się stało.
 
 **Czy to zastępuje code review?**
 Nie i nie ma zastępować. Celem jest przesunięcie uwagi człowieka tam, gdzie jest naprawdę potrzebna, i odsianie klas błędów, które maszyna wyłapie taniej. Werdykt `PASS-WITH-REVIEW` istnieje właśnie po to, żeby powiedzieć: *popatrz tutaj, i to z tego powodu*.

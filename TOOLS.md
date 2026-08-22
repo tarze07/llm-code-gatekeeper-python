@@ -6,7 +6,7 @@ Dokument towarzyszący [PLAN.md](PLAN.md). PLAN.md mówi *co* sprawdzać. Ten do
 - rdzeń i wszystkie własne bramki: **Python 3.12**, pakiet `gatekeeper`, CLI przez `typer`,
 - orkiestracja: **GitHub Actions**, integracja przez Check Runs API,
 - narzędzia zewnętrzne (semgrep, gitleaks, mutmut…) **nie są przepisywane** — piszemy do nich adaptery normalizujące wyjście,
-- pierwszy język docelowy ocenianych repozytoriów: Python; JS/TS jako drugi, przez ten sam interfejs adapterów.
+- pierwszy język docelowy ocenianych repozytoriów: Python; JS/TS i C# jako kolejne, przez ten sam interfejs adapterów — G0–G3 mają dziś (kamień 3) pełny parytet dla wszystkich trzech, G2 wciąż tylko Python.
 
 **Zasada podziału pracy:** wszystko, co istnieje jako dojrzałe narzędzie OSS, jest adapterem (1–2 dni). Wszystko, co jest specyficzne dla kodu z agenta, piszemy sami (3–10 dni) — i to jest właściwa wartość projektu.
 
@@ -17,9 +17,9 @@ Dokument towarzyszący [PLAN.md](PLAN.md). PLAN.md mówi *co* sprawdzać. Ten do
 | Bramka | Adapter (gotowe) | Własne narzędzie | Priorytet |
 |---|---|---|---|
 | G0 | — | `provenance`, `scope-guard` | **P0** |
-| G1 | ruff, mypy, tsc, eslint | `dep-guard` | **P0** |
-| G2 | pytest, diff-cover, mutmut | `cross-verify`, `test-sanity`, `mutation-scope`, `flaky-hunter`, `contract-diff` | **P0** (`cross-verify`), P1 reszta |
-| G3 | semgrep, gitleaks, trivy, checkov, pip-audit | zestaw reguł „nigdy", normalizator znalezisk | **P0** (sekrety), P1 reszta |
+| G1 | ruff, mypy, tsc, eslint, `dotnet build` | `dep-guard` (PyPI, npm, NuGet) | **P0** |
+| G2 | pytest, diff-cover, mutmut | `cross-verify`, `test-sanity`, `mutation-scope`, `flaky-hunter`, `contract-diff` | **P0** (`cross-verify`, Python), P1 reszta + adaptery TS/JS/C# |
+| G3 | semgrep, gitleaks, trivy, checkov, pip-audit, npm audit, `dotnet list package --vulnerable` | zestaw reguł „nigdy" (Python, TS/JS, C#), normalizator znalezisk | **P0** (sekrety, SAST, SCA — zbudowane), P1 reszta (IaC, licencje) |
 | G4 | Claude API | `review-panel`, `context-builder`, `adversarial-verifier` | P2 |
 | G5 | — | `report-renderer` (część core) | P1 |
 | G6 | — | `deploy-readiness` | P3 |

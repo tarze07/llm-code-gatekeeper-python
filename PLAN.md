@@ -255,21 +255,28 @@ Razem: ~3 miesiące do pełnego systemu, pierwsza realna wartość po ~3 tygodni
 
 ## 8. Stack — konkretne narzędzia
 
-| Warstwa | Python | JS/TS | Uniwersalne |
-|---|---|---|---|
-| Lint/format | ruff, black | eslint, prettier | pre-commit |
-| Typy | mypy --strict, pyright | tsc --strict | — |
-| Testy | pytest, hypothesis | vitest/jest, fast-check | — |
-| Pokrycie diff | coverage.py + diff-cover | c8 + diff-cover | — |
-| Mutacje | mutmut, cosmic-ray | Stryker | PIT (JVM) |
-| SAST | bandit, semgrep | semgrep | CodeQL |
-| SCA | pip-audit | npm audit | Trivy, osv-scanner |
-| Sekrety | — | — | gitleaks, trufflehog |
-| IaC | — | — | Checkov, tfsec |
-| Licencje | pip-licenses | license-checker | ScanCode, Syft/SPDX |
-| Kontrakty | schemathesis | Pact | OpenAPI diff, Buf |
-| Orkiestracja | — | — | GitHub Actions / GitLab CI + własny orchestrator bramek |
-| Warstwa LLM | — | — | Claude API (panel recenzentów, structured output) |
+| Warstwa | Python | JS/TS | C# | Uniwersalne |
+|---|---|---|---|---|
+| Lint/format | ruff, black | eslint, prettier | `dotnet format` | pre-commit |
+| Typy | mypy --strict, pyright | tsc --strict | `dotnet build` (kompilator *jest* kontrolą typów) | — |
+| Testy | pytest, hypothesis | vitest/jest, fast-check | `dotnet test` (xUnit/NUnit/MSTest) | — |
+| Pokrycie diff | coverage.py + diff-cover | c8 + diff-cover | coverlet + diff-cover | — |
+| Mutacje | mutmut, cosmic-ray | Stryker | Stryker.NET | PIT (JVM) |
+| SAST | bandit, semgrep | semgrep | semgrep | CodeQL |
+| SCA | pip-audit | npm audit | `dotnet list package --vulnerable` | Trivy, osv-scanner |
+| Sekrety | — | — | — | gitleaks, trufflehog |
+| IaC | — | — | — | Checkov, tfsec |
+| Licencje | pip-licenses | license-checker | `dotnet-project-licenses` | ScanCode, Syft/SPDX |
+| Kontrakty | schemathesis | Pact | Pact.NET | OpenAPI diff, Buf |
+| Orkiestracja | — | — | — | GitHub Actions / GitLab CI + własny orchestrator bramek |
+| Warstwa LLM | — | — | — | Claude API (panel recenzentów, structured output) |
+
+Zbudowane dziś (kamień 3, G0–G3): Python, TS/JS i C# mają pełny parytet w
+weryfikacji zależności (dep-guard: PyPI/npm/NuGet), poprawności statycznej
+(ruff+mypy / tsc+eslint / `dotnet build`), regułach „nigdy” (semgrep) i SCA
+(pip-audit / npm audit / `dotnet list package --vulnerable`). Testy,
+pokrycie, mutacje i kontrakty z tej tabeli to wciąż kamień 4 — patrz
+`G2.cross_verify` w README.md.
 
 **Punkt integracji:** GitHub Check Run per bramka (widoczny status i log) + jeden komentarz zbiorczy z decyzją i uzasadnieniem, aktualizowany przy każdym pushu zamiast mnożenia komentarzy.
 

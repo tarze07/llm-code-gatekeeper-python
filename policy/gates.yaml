@@ -98,6 +98,17 @@ gates:
     require_ruff: true # brak ruffa = błąd bramki
     require_mypy: false # wiele repo nie ma mypy skonfigurowanego — brak to nie błąd
     mypy_args: []
+    # TS/JS: tsc/eslint uruchamiają się tylko, gdy w repo jest odpowiedni config
+    # (tsconfig.json / .eslintrc*) — bez configu bramka daje `pass`, nie `error`.
+    require_tsc: false
+    require_eslint: false
+    tsconfig_path: tsconfig.json
+    tsc_args: []
+    eslint_args: []
+    # C#: `dotnet build` wymaga wcześniejszego `dotnet restore` w CI — bramka
+    # sama nie ściąga pakietów (jedyne miejsce z siecią w G1 celowo nim nie jest).
+    require_dotnet_build: false
+    dotnet_args: []
     keep_env: []
   G3.sast:
     keep_env: []

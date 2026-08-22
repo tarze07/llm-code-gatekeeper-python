@@ -30,6 +30,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Odkomentuj i dostosuj, jeśli oceniane repo zawiera TS/JS albo C# —
+      # G1.static/G3.sca wtedy realnie coś sprawdzą zamiast dawać `pass` bez
+      # dowodu (brak `tsconfig.json`/configu eslinta/`.csproj` to co innego
+      # niż brak samego narzędzia, ale bez node/dotnet w PATH brama i tak nie
+      # ma czym uruchomić tsc/eslint/`dotnet build`).
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: "22" }
+      # - run: npm ci   # albo: npm install --global typescript eslint
+      # - uses: actions/setup-dotnet@v4
+      #   with: { dotnet-version: "8.0.x" }
+      # - run: dotnet restore   # bramka sama nie ściąga pakietów NuGet
+
       - name: Instalacja bramy
         run: pip install --quiet .
 
