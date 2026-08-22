@@ -234,7 +234,13 @@ Brak trailera nie jest błędem — repozytorium, które dopiero zaczyna, nie ma
 
 Klasa defektu, której nie łapie żaden standardowy skaner, bo wszystkie zakładają, że pakiet wpisany do manifestu istnieje. Agent potrafi wymyślić nazwę biblioteki, a lockfile powstaje razem z kodem — więc CI instaluje dokładnie to, co agent zmyślił.
 
-Czyta `pyproject.toml` (PEP 621, PEP 735, Poetry), `requirements*.txt` i `package.json`, porównuje wersję z gałęzi bazowej z wersją z PR-a i sprawdza **wyłącznie nowe** pakiety.
+Czyta manifesty trzech ekosystemów naraz, porównuje wersję z gałęzi bazowej z wersją z PR-a i sprawdza **wyłącznie nowe** pakiety:
+
+| Ekosystem | Manifesty | Rejestr |
+|---|---|---|
+| PyPI | `pyproject.toml` (PEP 621, PEP 735, Poetry), `requirements*.txt` | `pypi.org` |
+| npm | `package.json` | `registry.npmjs.org` |
+| NuGet | `*.csproj`/`*.fsproj`, `Directory.Packages.props`, `packages.config` | `api.nuget.org` |
 
 | Znalezisko | Kiedy | Waga |
 |---|---|---|
@@ -248,32 +254,59 @@ Podobieństwo nazw liczy się po zwinięciu homoglifów (`rn`→`m`, `1`→`l`, 
 
 Pakiety z Waszego prywatnego rejestru wpisz raz w politykę jako `internal_prefixes`, zamiast dopisywać wyjątek przy każdym PR-ze.
 
-### `G1.static` — ruff + mypy na zmienionych liniach
+### `G1.static` — poprawność statyczna: ruff+mypy, tsc+eslint, `dotnet build`
 
-Typy w trybie strict wyłapują dużą część halucynacji API agenta: wywołanie metody, której nie ma, albo argumentu o innej nazwie. Tania bramka o wysokiej trafności.
+Typy w trybie strict wyłapują dużą część halucynacji API agenta: wywołanie metody, której nie ma, albo argumentu o innej nazwie. Tania bramka o wysokiej trafności — dla C# i TS/JS działa dokładnie z tego samego powodu: kompilator (`dotnet build`, `tsc`) *jest* kontrolą typów w trybie strict, nie trzeba osobnego narzędzia.
 
-Jedyna nietrywialna decyzja: raportuje **tylko znaleziska w zmienionych liniach** (+3 linie kontekstu). Bez tego pierwszy przebieg na starszym repo dawałby tysiące błędów mypy i projekt umierałby w dniu wdrożenia — dług istniejącego kodu to osobny temat, nie blokada tego PR-a.
+Jedna bramka, jeden wynik, niezależnie od tego, ile języków dotyka diff:
+
+| Język | Narzędzia | Warunek uruchomienia |
+|---|---|---|
+| Python | ruff + mypy | zawsze (ruff wymagany domyślnie, mypy opcjonalny) |
+| TypeScript | `tsc --noEmit` | tylko gdy w repo jest `tsconfig.json` |
+| TS/JS | eslint | tylko gdy w repo jest config eslinta (`.eslintrc*`/`eslint.config.*`) |
+| C# | `dotnet build` per projekt dotknięty zmianą | tylko gdy istnieje `.csproj` obejmujący zmieniony plik |
+
+Jedyna nietrywialna decyzja: raportuje **tylko znaleziska w zmienionych liniach** (+3 linie kontekstu), dla wszystkich języków jednakowo. Bez tego pierwszy przebieg na starszym repo dawałby tysiące błędów i projekt umierałby w dniu wdrożenia — dług istniejącego kodu to osobny temat, nie blokada tego PR-a.
 
 | Fakt | Co znaczy |
 |---|---|
-| `static.high_severity_count` | realne defekty (rodziny ruffa F/B/S/ASYNC/PL, błędy mypy) — nie styl |
+| `static.high_severity_count` | realne defekty (rodziny ruffa F/B/S/ASYNC/PL, błędy mypy/tsc/`dotnet build`) — nie styl |
 | `static.mypy_available` | `false`, gdy mypy nie jest skonfigurowany w repo — to nie jest błąd |
+| `static.tsconfig_found` / `static.eslint_config_found` / `static.csproj_found` | `false`, gdy w repo nie ma configu, którego narzędzie wymaga — bramka wtedy w ogóle go nie woła |
 
-Reguły stylistyczne ruffa (import order, formatowanie) raportują się jako `low` — zgłoszenie stylistyczne udające błąd to najprostszy sposób na to, żeby zespół przestał czytać raporty.
+Reguły stylistyczne ruffa (import order, formatowanie) i eslinta poza rdzeniowymi regułami „problem" (np. `no-undef`, `no-eval`) raportują się jako `low`/`medium` — zgłoszenie stylistyczne udające błąd to najprostszy sposób na to, żeby zespół przestał czytać raporty.
+
+`tsc`/`eslint` wołane są najpierw z `node_modules/.bin/` (przypięta wersja projektu), dopiero potem z globalnego `PATH`. `dotnet build` zakłada, że `dotnet restore` już się odbył — bramka sama nie ściąga pakietów.
 
 ### `G3.sast` — reguły „nigdy" (semgrep)
 
-Zestaw reguł w `rules/semgrep/never.yaml`: wzorce, które **nie mają poprawnego zastosowania w tym repo** — wyłączona weryfikacja TLS, `eval`/`exec` na wejściu, SQL przez sklejanie stringów, `subprocess(shell=True)` z interpolacją, `pickle`/`yaml.load` niebezpieczne, nasłuch na `0.0.0.0`, polityka IAM z wildcardem. Trafienie oznacza błąd albo świadome obejście zabezpieczenia „żeby przeszło" — a to drugie w kodzie od agenta zdarza się częściej, niż się wydaje.
+Zestaw reguł w `rules/semgrep/never.yaml`: wzorce, które **nie mają poprawnego zastosowania w tym repo**. Semgrep sam dobiera język per plik, więc jedna bramka pokrywa Pythona, TS/JS i C# naraz — bez osobnego adaptera na język:
 
-Każda reguła ma test pozytywny **i negatywny** (`semgrep --test`). Reguła bez testu negatywnego prędzej czy później zaczyna blokować poprawny kod i podkopuje zaufanie do całej bramy — dlatego to obowiązkowe, nie zalecane.
+| Język | Czego pilnuje |
+|---|---|
+| Python | wyłączona weryfikacja TLS, `eval`/`exec` na wejściu, SQL przez sklejanie stringów, `subprocess(shell=True)` z interpolacją, `pickle`/`yaml.load` niebezpieczne, nasłuch na `0.0.0.0` |
+| TS/JS | `eval`/`new Function` na wejściu, `child_process.exec`/`execSync` z interpolacją (odpowiednik `shell=True`), `rejectUnauthorized: false`/`NODE_TLS_REJECT_UNAUTHORIZED=0` |
+| C# | wyłączona weryfikacja certyfikatu (`ServerCertificateValidationCallback`), `SqlCommand` przez sklejanie stringów, `Process.Start` z interpolowanymi argumentami, `BinaryFormatter`/pokrewne formatery (niebezpieczna deserializacja) |
+| Uniwersalne (JSON/YAML) | polityka IAM z wildcardem |
+
+Trafienie oznacza błąd albo świadome obejście zabezpieczenia „żeby przeszło" — a to drugie w kodzie od agenta zdarza się częściej, niż się wydaje.
+
+Każda reguła ma test pozytywny **i negatywny** (`semgrep --test`). Reguła bez testu negatywnego prędzej czy później zaczyna blokować poprawny kod i podkopuje zaufanie do całej bramy — dlatego to obowiązkowe, nie zalecane. Osobna reguła dla `eval` w TS/JS niż w Pythonie nie jest przypadkiem: `exec()` w Node-owym `child_process` to zupełnie inna funkcja (uruchamia proces) niż Pythonowy `exec()` (interpretuje kod) — wspólna reguła dawałaby fałszywe alarmy na bezpiecznym `execFile`/`spawn`.
 
 Podobnie jak `G1.static`, filtruje do zmienionych linii.
 
-### `G3.sca` — podatności w nowych zależnościach (pip-audit)
+### `G3.sca` — podatności w nowych zależnościach
 
-Blokuje wyłącznie na podatnościach w pakietach, które ten PR **wprowadza** — dług w już zastanych zależnościach to osobny raport tygodniowy. Zakres na razie: tylko PyPI.
+Blokuje wyłącznie na podatnościach w pakietach, które ten PR **wprowadza** — dług w już zastanych zależnościach to osobny raport tygodniowy. Trzy ekosystemy, jedna bramka, jedna decyzja:
 
-Jedyna bramka, która **musi** dostać sieć (pyta o znane podatności w PyPI/OSV) — jawnie przez `network=True`, nie domyślnie. Audytuje każdy nowy pakiet osobno: jeden nieistniejący/halucynowany pakiet w tym samym PR-ze (który i tak łapie `G1.deps`) nie ma prawa zgasić dowodu dla pozostałych.
+| Ekosystem | Narzędzie |
+|---|---|
+| PyPI | pip-audit (pyta PyPI/OSV) |
+| npm | `npm audit` (operuje na `package-lock.json`) |
+| NuGet | `dotnet list package --vulnerable` per projekt dotknięty zmianą |
+
+Jedyna bramka, która **musi** dostać sieć — jawnie przez `network=True`, nie domyślnie. Audytuje pakiety per ekosystem osobno: jeden nieistniejący/halucynowany pakiet w tym samym PR-ze (który i tak łapie `G1.deps`) nie ma prawa zgasić dowodu dla pozostałych — ani w tym samym ekosystemie, ani w innym. Fakt `sca.checked_ecosystems` mówi wprost, które ekosystemy miały w tym PR-ze nowe zależności do sprawdzenia.
 
 ### `G3.secrets` — sekrety w kodzie
 
@@ -387,6 +420,9 @@ gates:
   G1.static:
     require_ruff: true             # brak ruffa = błąd bramki
     require_mypy: false            # wiele repo nie ma mypy skonfigurowanego
+    require_tsc: false             # jw. dla TS — bez tsconfig.json i tak się pomija
+    require_eslint: false          # jw. dla eslinta — bez configu i tak się pomija
+    require_dotnet_build: false    # jw. dla C# — bez .csproj i tak się pomija
   G2.cross_verify:
     python_path: ["src"]           # układ src/ — katalogi dokładane do PYTHONPATH
     timeout_s: 600
@@ -578,16 +614,16 @@ Trzy pytania, które padają, gdy ktoś chce wpuścić narzędzie do firmowego r
 
 Prawie nigdzie. Ruch na zewnątrz jest **jawny i policzalny**, nie domyślny:
 
-- **nazwy nowych pakietów** do `pypi.org`/`registry.npmjs.org` przy sprawdzaniu, czy pakiet istnieje (`G1.deps`) — odpowiedzi buforowane w `~/.cache/gatekeeper/registry` na dobę,
-- **nazwy i wersje nowo dodanych zależności PyPI** do bazy OSV/PyPI przy sprawdzaniu podatności (`G3.sca`) — jedyna bramka z jawnym dostępem do sieci (`network: true`), pozostałe biegną bez niej.
+- **nazwy nowych pakietów** do `pypi.org`/`registry.npmjs.org`/`api.nuget.org` przy sprawdzaniu, czy pakiet istnieje (`G1.deps`) — odpowiedzi buforowane w `~/.cache/gatekeeper/registry` na dobę,
+- **nazwy i wersje nowo dodanych zależności** do bazy OSV/PyPI (pip-audit), rejestru doradczego npm (`npm audit`) albo usługi NuGet-a (`dotnet list package --vulnerable`) przy sprawdzaniu podatności (`G3.sca`) — jedyna bramka z jawnym dostępem do sieci (`network: true`), pozostałe biegną bez niej.
 
-Kod, diff, testy i sekrety **nie opuszczają Twojej maszyny**. Gitleaks, ruff, mypy, semgrep i cross-verify działają lokalnie, bez sieci — żaden model językowy nie jest wołany (panel LLM, G4, to kamień 5 i dziś nie istnieje).
+Kod, diff, testy i sekrety **nie opuszczają Twojej maszyny**. Gitleaks, ruff, mypy, tsc, eslint, `dotnet build`, semgrep i cross-verify działają lokalnie, bez sieci — żaden model językowy nie jest wołany (panel LLM, G4, to kamień 5 i dziś nie istnieje).
 
 Chcesz odciąć sieć całkowicie: pomiń `G1.deps` i `G3.sca` (`gatekeeper run --gate G0.scope --gate G3.secrets --gate G3.sast`) albo ustaw `require_tool: false` na `G3.sca`, żeby dostać `skipped` zamiast prób połączenia.
 
 ### Brama uruchamia kod z PR-a
 
-`G2.cross_verify` wykonuje testy napisane przez agenta, a `G1.static`/`G3.sast` uruchamiają linter/semgrep na tym kodzie. To jest **wykonanie niezaufanego kodu** — traktuj to tak samo poważnie jak uruchomienie `npm install` z cudzego repozytorium.
+`G2.cross_verify` wykonuje testy napisane przez agenta, a `G1.static`/`G3.sast` uruchamiają linter/kompilator/semgrep na tym kodzie — `dotnet build` w szczególności *kompiluje* kod z PR-a, więc source generatory i skrypty budowania (MSBuild targets) też się wykonują. To jest **wykonanie niezaufanego kodu** — traktuj to tak samo poważnie jak uruchomienie `npm install`/`dotnet restore` z cudzego repozytorium.
 
 Co robi `core/runner.py`, jedyne miejsce w systemie, które uruchamia podprocesy:
 
@@ -692,20 +728,21 @@ Oba są w raporcie: run-id w nagłówku, fingerprint na końcu wiersza pod tytu�
 
 Dzisiaj bramkarz umie:
 
-- **pilnować rozmiaru i higieny zmiany**, w tym zakresu ticketu (`scope_map`) — duży diff od agenta jest nierecenzowalny,
+- **pilnować rozmiaru i higieny zmiany**, w tym zakresu ticketu (`scope_map`) — duży diff od agenta jest nierecenzowalny, niezależnie od języka,
 - **wiedzieć, co wyprodukowało zmianę** (`G0.provenance`) — model, agent, sesja, z trailerów commitów,
-- **sprawdzać, czy nowe pakiety naprawdę istnieją**, czy nie podszywają się pod popularne (typosquat/slopsquat) i czy nie mają znanych podatności (`G1.deps` + `G3.sca`),
-- **łapać halucynacje API i realne błędy statyczne** (ruff + mypy, `G1.static`) na zmienionych liniach,
-- **weryfikować, czy nowe testy czegokolwiek dowodzą** (cross-verify),
-- **szukać sekretów** — również w plikach testowych i fixture'ach,
-- **blokować wzorce bez poprawnego zastosowania w kodzie** — wyłączony TLS, `eval` na wejściu, SQLi, `shell=True`, niebezpieczna deserializacja (`G3.sast`),
+- **sprawdzać, czy nowe pakiety naprawdę istnieją**, czy nie podszywają się pod popularne (typosquat/slopsquat) i czy nie mają znanych podatności — dla **PyPI, npm i NuGet naraz** (`G1.deps` + `G3.sca`),
+- **łapać halucynacje API i realne błędy statyczne** na zmienionych liniach — Python (ruff + mypy), TypeScript/JavaScript (tsc + eslint), **C# (`dotnet build`)** — wszystko przez `G1.static`,
+- **weryfikować, czy nowe testy czegokolwiek dowodzą** (cross-verify) — **tylko dla Pythona**,
+- **szukać sekretów** — również w plikach testowych i fixture'ach, niezależnie od języka,
+- **blokować wzorce bez poprawnego zastosowania w kodzie** — wyłączony TLS, `eval` na wejściu, SQLi, `shell=True`/`Process.Start` z interpolacją, niebezpieczna deserializacja — dla **Pythona, TS/JS i C#** (`G3.sast`),
 - **uruchamiać to wszystko w izolacji** — bez sieci domyślnie, bez sekretów w środowisku, z limitem czasu i pamięci (`core/runner.py`),
-- **łapać własną regresję** przed produkcją — zestaw kalibracyjny (`gatekeeper calibrate`).
+- **łapać własną regresję** przed produkcją — zestaw kalibracyjny (`gatekeeper calibrate`), z przypadkami dla PyPI i npm.
 
 Nie sprawdza jeszcze:
 
 - pokrycia różnicowego i testów mutacyjnych (reszta G2 — kamień 4),
-- IaC, licencji i podatności poza ekosystemem PyPI (reszta G3 — kamień 3 w toku),
+- weryfikacji krzyżowej testów dla TS/JS i C# — `G2.cross_verify` działa dziś **tylko na Pythonie/pytest**; adapter dla vitest/jest i `dotnet test` to świadomie osobny, jeszcze niezrobiony krok — najdroższa i najbardziej ryzykowna część do zrobienia dobrze,
+- IaC i licencji (reszta G3 — kamień 3 w toku); SCA samo w sobie jest już zbudowane dla PyPI/npm/NuGet, poza tym zakresem zależności to wciąż dług,
 - czy implementacja robi to, co było w zadaniu (G4 — kamień 5),
 - gotowości wdrożeniowej: migracji, rollbacku, obserwowalności (G6 — kamień 6).
 
