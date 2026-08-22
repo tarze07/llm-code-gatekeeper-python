@@ -6,7 +6,7 @@ pip-audit ma osobne testy na zapisanej próbce (`test_adapters_sca.py`).
 
 from __future__ import annotations
 
-from gatekeeper.adapters import sca
+from gatekeeper.adapters import dotnet, sca
 from gatekeeper.core.change import ChangeContext
 from gatekeeper.core.finding import Finding, Severity
 from gatekeeper.gates.g3_sca import ScaGuard
@@ -104,10 +104,22 @@ def _raise_missing(*a, **k):
     raise ToolMissing("nie znaleziono programu: pip-audit")
 
 
-def test_npm_nie_jest_w_zakresie_kamienia_3(repo, monkeypatch):
-    """Świadome zawężenie (TOOLS.md §5.1): tylko PyPI. npm zostaje w NOT_CHECKED."""
-    called = []
-    monkeypatch.setattr(sca, "run_pip_audit", lambda *a, **k: called.append(1) or [])
+def test_nowa_zaleznosc_npm_z_podatnoscia_blokuje(repo, monkeypatch):
+    def fake_run_npm_audit(repo_path, sandbox, gate, new_packages):
+        assert new_packages == {"left-pad"}
+        return [
+            Finding(
+                gate=gate,
+                rule_id="sca.1096485",
+                severity=Severity.HIGH,
+                title="left-pad: podatność testowa",
+                failure_scenario="podatność testowa",
+                file="package.json",
+                evidence={"package": "left-pad"},
+            )
+        ]
+
+    monkeypatch.setattr(sca, "run_npm_audit", fake_run_npm_audit)
 
     repo.write("package.json", '{"dependencies": {}}\n')
     repo.commit("baza")
@@ -118,6 +130,45 @@ def test_npm_nie_jest_w_zakresie_kamienia_3(repo, monkeypatch):
 
     result = ScaGuard({}).run(change)
 
-    assert result.status == "pass"
-    assert result.facts["sca.checked_package_count"] == 0
-    assert called == []
+    assert result.status == "fail"
+    assert result.facts["sca.checked_package_count"] == 1
+    assert result.facts["sca.checked_ecosystems"] == ["npm"]
+    assert result.findings[0].rule_id == "sca.1096485"
+
+
+def test_nowa_zaleznosc_nuget_z_podatnoscia_blokuje(repo, monkeypatch):
+    def fake_run_dotnet_list_vulnerable(repo_path, sandbox, gate, project, new_packages, **kw):
+        assert project == "Demo.csproj"
+        assert new_packages == {"newtonsoft.json"}
+        return [
+            Finding(
+                gate=gate,
+                rule_id="sca.GHSA-test",
+                severity=Severity.HIGH,
+                title="Newtonsoft.Json: podatność testowa",
+                failure_scenario="podatność testowa",
+                file=project,
+                evidence={"package": "Newtonsoft.Json"},
+            )
+        ]
+
+    monkeypatch.setattr(dotnet, "run_dotnet_list_vulnerable", fake_run_dotnet_list_vulnerable)
+
+    csproj = (
+        '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>{deps}</ItemGroup></Project>'
+    )
+    repo.write("Demo.csproj", csproj.format(deps=""))
+    repo.commit("baza")
+    repo.checkout("feature", create=True)
+    repo.write(
+        "Demo.csproj",
+        csproj.format(deps='<PackageReference Include="Newtonsoft.Json" Version="9.0.1" />'),
+    )
+    repo.commit("feat: newtonsoft.json")
+    change = ChangeContext.from_git(repo.path, "main", "HEAD")
+
+    result = ScaGuard({}).run(change)
+
+    assert result.status == "fail"
+    assert result.facts["sca.checked_ecosystems"] == ["nuget"]
+    assert result.findings[0].rule_id == "sca.GHSA-test"

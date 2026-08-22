@@ -59,6 +59,25 @@ def projects_for(repo: Path, file_paths: list[str]) -> list[str]:
     return sorted(p for p in found if p is not None)
 
 
+def project_for_manifest(repo: Path, manifest_path: str) -> str | None:
+    """Projekt, do którego odnosi się zmieniony manifest zależności NuGet.
+
+    `.csproj`/`.fsproj` *są* projektem — zwracane wprost. `packages.config`
+    (legacy) leży zwykle obok projektu, który opisuje — szukamy `.csproj` w
+    tym samym katalogu. `Directory.Packages.props` (central package
+    management) obowiązuje repo-wide i nie da się go tanio przypisać do
+    jednego projektu bez pełnej analizy grafu importów MSBuild — `None`
+    jest tu uczciwą odpowiedzią, nie zgadywanką.
+    """
+    if manifest_path.endswith((".csproj", ".fsproj")):
+        return manifest_path
+    if Path(manifest_path).name == "packages.config":
+        directory = Path(manifest_path).parent
+        candidates = sorted((repo / directory).glob("*.csproj"))
+        return (directory / candidates[0].name).as_posix() if candidates else None
+    return None
+
+
 def dotnet_build_scenario(level: str, code: str, message: str) -> str:
     return (
         f"Kompilator C# zgłasza `{code}`: {message}. W kodzie od agenta ta klasa błędów "
