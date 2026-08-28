@@ -48,6 +48,9 @@ thresholds:
   sanity.blocking_count:
     max: 0
     message: "Nowy test nie dowodzi niczego — brak asercji albo asercja na stałą (G2.test_sanity)."
+  coverage.diff_ratio:
+    min: 0.80
+    message: "Nowe linie produkcyjne słabo pokryte testami całego zestawu (G2.diff_coverage)."
   sast.critical_count:
     max: 0
     message: "Reguła „nigdy” trafiła w zmienionych liniach — patrz rules/semgrep/never.yaml."
@@ -78,6 +81,7 @@ max_findings_reported: 10
 warn_only:
   - G2.cross_verify # USUŃ po tygodniu obserwacji i przeglądzie fałszywych alarmów
   - G2.test_sanity # kamień 4, nowa — USUŃ po tygodniu obserwacji
+  - G2.diff_coverage # kamień 4, nowa — USUŃ po tygodniu obserwacji
   - G1.static # kamień 3, nowa — USUŃ po tygodniu obserwacji
   - G3.sast # kamień 3, nowa — USUŃ po tygodniu obserwacji
   - G3.sca # kamień 3, nowa — USUŃ po tygodniu obserwacji i sprawdzeniu limitu sieci w CI
@@ -125,4 +129,9 @@ gates:
     # Jedyna bramka z dostępem do sieci — jeżeli CI biegnie w środowisku bez
     # wyjścia do internetu, ustaw `require_tool: false`, żeby dostać `skipped`
     # zamiast `error` na każdym PR-ze dodającym zależność.
+    keep_env: []
+  G2.diff_coverage:
+    require_tool: true # brak coverage/pytest/diff-cover = błąd bramki
+    python_path: ["src"] # jak G2.cross_verify — katalogi dokładane do PYTHONPATH
+    pytest_args: []
     keep_env: []

@@ -44,10 +44,18 @@ def run_tool(
     timeout_s: float,
     network: bool = False,
     ok_returncodes: tuple[int, ...] = (0,),
+    env: dict[str, str] | None = None,
 ) -> ExecResult:
-    """Uruchamia narzędzie i zamienia jego awarie na jawne wyjątki."""
+    """Uruchamia narzędzie i zamienia jego awarie na jawne wyjątki.
+
+    `env=None` (domyślnie): sandbox dziedziczy `os.environ` (oczyszczone
+    z poświadczeń) — tak działa większość adapterów. Jawny `env` jest
+    potrzebny tam, gdzie narzędzie musi widzieć kod z innej ścieżki niż
+    bieżący katalog roboczy (np. `PYTHONPATH` w `adapters/coverage.py`,
+    ten sam problem co `testing/pytest_runner.py::build_env`).
+    """
     try:
-        result = sandbox.run(command, cwd=cwd, timeout_s=timeout_s, network=network)
+        result = sandbox.run(command, cwd=cwd, env=env, timeout_s=timeout_s, network=network)
     except SandboxUnavailable as exc:
         raise ToolMissing(str(exc)) from exc
     if result.timed_out:

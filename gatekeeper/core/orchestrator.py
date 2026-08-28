@@ -36,8 +36,8 @@ from .runner import describe_isolation
 #: Jawna lista luk. Trafia do raportu, żeby nikt nie wziął zielonej bramy za
 #: dowód, że zmiana jest bezpieczna (PLAN.md §9).
 NOT_CHECKED = [
-    "pokrycie różnicowe, testy mutacyjne, flaky-testy, contract-diff (G2) — "
-    "kamień 4, w toku (G2.test_sanity zbudowane)",
+    "testy mutacyjne, flaky-testy, contract-diff (G2) — kamień 4, w toku "
+    "(G2.test_sanity i G2.diff_coverage zbudowane)",
     "G2.cross_verify (nowe testy przeciw kodowi sprzed zmiany) — tylko Python; "
     "adapter TS/JS (vitest/jest) i C# (dotnet test) w planie",
     "IaC i licencje (G3) — kamień 3 w toku; SCA sam w sobie obejmuje "
@@ -55,6 +55,7 @@ DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "G3.sca": ("G0.scope", "G0.provenance"),
     "G2.cross_verify": ("G1.deps", "G1.static"),
     "G2.test_sanity": ("G1.deps", "G1.static"),
+    "G2.diff_coverage": ("G1.deps", "G1.static"),
 }
 
 #: Bramki, które nie mają prawa ruszyć, dopóki wskazane nie są zielone.

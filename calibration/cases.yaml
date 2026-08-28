@@ -108,3 +108,18 @@ cases:
     expect:
       verdict: PASS
       warning_rules: [sanity.blocking_count]
+
+  - name: rozgalezienie-bez-testu
+    description: >-
+      Nowa funkcja z `if`/`else`, test pokrywa tylko jedną gałąź —
+      `--branch-coverage` w `diff-cover` ma to złapać jako niepokryte, mimo
+      że linia `if` sama w sobie się wykonuje (G2.diff_coverage, TOOLS.md
+      §4.5). G2.diff_coverage jest w `warn_only` (kamień 4, świeża bramka),
+      więc oczekiwany werdykt to PASS z ostrzeżeniem `coverage.diff_ratio`,
+      nie BLOCK — ten fixture ma zacząć failować w dniu, w którym ktoś
+      zdejmie `warn_only` bez sprawdzenia, czy reguła rzeczywiście działa.
+    fixture: rozgalezienie-bez-testu
+    requires_tools: [diff-cover]
+    expect:
+      verdict: PASS
+      warning_rules: [coverage.diff_ratio]

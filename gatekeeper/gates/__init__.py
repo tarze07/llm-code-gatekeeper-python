@@ -50,6 +50,7 @@ def all_gates() -> list[type[Gate]]:
         g1_deps,
         g1_static,
         g2_crossverify,
+        g2_diff_coverage,
         g2_test_sanity,
         g3_sast,
         g3_sca,

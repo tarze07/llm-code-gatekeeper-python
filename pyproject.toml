@@ -27,6 +27,8 @@ gates = [
     "types-PyYAML>=6.0",
     "semgrep>=1.70",
     "pip-audit>=2.7",
+    "coverage>=7.0",
+    "diff-cover>=8.0",
 ]
 
 [project.scripts]

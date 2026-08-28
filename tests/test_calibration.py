@@ -48,6 +48,7 @@ def test_wczytywanie_prawdziwego_pliku_cases_yaml():
         "sekret-w-diffie",
         "test-bez-dowodu",
         "test-bez-asercji",
+        "rozgalezienie-bez-testu",
     }
     hp = next(c for c in cases if c.name == "halucynowany-pakiet")
     assert hp.expect.verdict is Verdict.BLOCK

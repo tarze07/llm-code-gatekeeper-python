@@ -26,7 +26,7 @@ Założenie, na którym stoi całość: w pracy z agentem **testy, lockfile, kon
 
 ## Stan implementacji
 
-Zbudowane są **kamienie 1–3** z [TOOLS.md](TOOLS.md) (koniec fazy 1 z PLAN.md) oraz pierwszy element **kamienia 4** (`G2.test_sanity`):
+Zbudowane są **kamienie 1–3** z [TOOLS.md](TOOLS.md) (koniec fazy 1 z PLAN.md) oraz pierwsze dwa elementy **kamienia 4** (`G2.test_sanity`, `G2.diff_coverage`):
 
 | Element | Co robi |
 |---|---|
@@ -45,11 +45,12 @@ Zbudowane są **kamienie 1–3** z [TOOLS.md](TOOLS.md) (koniec fazy 1 z PLAN.md
 | `G1.static` | Python: ruff + mypy · TS/JS: tsc + eslint · **C#: `dotnet build`** — na zmienionych liniach, łapie halucynacje API |
 | `G2.cross_verify` | nowe testy uruchomione przeciw kodowi **sprzed** zmiany — wykrywa testy, które niczego nie dowodzą (**tylko Python**) |
 | `G2.test_sanity` | linter jakości nowych testów (AST): brak asercji, asercja na stałą, mock porównywany z własnym `return_value`, sam `is not None`, połknięty wyjątek — **tylko Python**, `warn_only` |
+| `G2.diff_coverage` | pokrycie różnicowe branch-aware: `coverage.py` + `diff-cover`, `if` z niepokrytą gałęzią nie liczy się jako pokryty — **tylko Python**, `warn_only` |
 | `G3.secrets` | gitleaks; sekret w diffie blokuje, zastany idzie do długu |
 | `G3.sast` | reguły „nigdy" (`rules/semgrep/`) na zmienionych liniach — TLS, eval, SQLi, `shell=True`/`Process.Start`, deserializacja, IAM — Python, TS/JS, **C#** |
 | `G3.sca` | pip-audit (PyPI), npm audit (npm), **`dotnet list package --vulnerable` (NuGet)** — na nowo dodanych zależnościach; jedyna bramka z dostępem do sieci |
 
-Nie sprawdza jeszcze: pokrycia różnicowego, mutacji, flaky-testów i contract-diff (reszta G2 — `test.no_new_path` w `G2.test_sanity` czeka na diff-coverage), weryfikacji krzyżowej i jakości testów dla TS/JS/C# (reszta G2), IaC/licencje (reszta G3), G4 (panel LLM), G6. Brama wypisuje tę listę w każdym raporcie.
+Nie sprawdza jeszcze: mutacji, flaky-testów i contract-diff (reszta G2 — `test.no_new_path` w `G2.test_sanity` ma już dane z `G2.diff_coverage`, brakuje samej reguły), weryfikacji krzyżowej i jakości testów dla TS/JS/C# (reszta G2), IaC/licencje (reszta G3), G4 (panel LLM), G6. Brama wypisuje tę listę w każdym raporcie.
 
 ## Szybki start
 
