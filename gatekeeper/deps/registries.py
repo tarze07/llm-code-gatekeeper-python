@@ -143,7 +143,8 @@ class HttpRegistry:
             if response.status_code != 200:
                 raise RegistryUnavailable(f"{url}: HTTP {response.status_code}")
             try:
-                return response.json()
+                data: dict[str, Any] = response.json()
+                return data
             except ValueError as exc:
                 raise RegistryUnavailable(f"{url}: nieparsowalna odpowiedź") from exc
         raise RegistryUnavailable(f"{url}: {last_error}")

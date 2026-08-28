@@ -12,7 +12,7 @@ który — jak wszystko w tym repo — może zostać zmodyfikowany przez agenta.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -106,14 +106,15 @@ def _compare(lhs: Any, op: str, rhs: Any) -> bool:
         lhs, rhs = float(lhs), float(rhs)
     else:
         lhs, rhs = str(lhs), str(rhs)
-    return {
+    dispatch: dict[str, Callable[[], bool]] = {
         ">=": lambda: lhs >= rhs,
         "<=": lambda: lhs <= rhs,
         ">": lambda: lhs > rhs,
         "<": lambda: lhs < rhs,
         "==": lambda: lhs == rhs,
         "!=": lambda: lhs != rhs,
-    }[op]()
+    }
+    return dispatch[op]()
 
 
 def _is_number(v: Any) -> bool:

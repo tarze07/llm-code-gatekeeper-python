@@ -24,6 +24,7 @@ dev = [
 gates = [
     "ruff>=0.5",
     "mypy>=1.10",
+    "types-PyYAML>=6.0",
     "semgrep>=1.70",
     "pip-audit>=2.7",
 ]

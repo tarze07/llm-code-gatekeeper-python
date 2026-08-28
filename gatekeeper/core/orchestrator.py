@@ -136,7 +136,8 @@ def run_gates(
     statuses: dict[str, str] = {}
 
     for wave in plan.waves:
-        runnable, blocked = [], []
+        runnable: list[tuple[Gate, list[str]]] = []
+        blocked: list[tuple[Gate, list[str]]] = []
         for gate in wave:
             missing = [
                 dep

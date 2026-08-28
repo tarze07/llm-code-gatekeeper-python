@@ -27,7 +27,7 @@ import shutil
 import signal
 import subprocess
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -155,7 +155,7 @@ class Sandbox:
             command=tuple(argv),
         )
 
-    def _limits(self):
+    def _limits(self) -> Callable[[], None]:
         memory_mb = self.policy.memory_mb
         max_processes = self.policy.max_processes
 
@@ -207,7 +207,7 @@ def describe_isolation() -> str:
     )
 
 
-def _kill_group(proc: subprocess.Popen) -> None:
+def _kill_group(proc: subprocess.Popen[str]) -> None:
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except (ProcessLookupError, PermissionError):  # pragma: no cover

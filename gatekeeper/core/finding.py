@@ -50,16 +50,16 @@ class Severity(StrEnum):
 
     # Porządek liniowy — potrzebny polityce (`sast.severity >= high`).
     # StrEnum dziedziczy porównania po `str`, więc trzeba je nadpisać jawnie.
-    def __lt__(self, other: Any) -> bool:  # type: ignore[override]
+    def __lt__(self, other: Any) -> bool:
         return self.rank < Severity.parse(other).rank
 
-    def __le__(self, other: Any) -> bool:  # type: ignore[override]
+    def __le__(self, other: Any) -> bool:
         return self.rank <= Severity.parse(other).rank
 
-    def __gt__(self, other: Any) -> bool:  # type: ignore[override]
+    def __gt__(self, other: Any) -> bool:
         return self.rank > Severity.parse(other).rank
 
-    def __ge__(self, other: Any) -> bool:  # type: ignore[override]
+    def __ge__(self, other: Any) -> bool:
         return self.rank >= Severity.parse(other).rank
 
 
