@@ -95,3 +95,16 @@ cases:
     expect:
       verdict: PASS
       warning_rules: [tests.pass_on_pre_change_code]
+
+  - name: test-bez-asercji
+    description: >-
+      Nowy test to `assert True` — nie sprawdza niczego, niezależnie od
+      testowanego kodu (TOOLS.md §4.2, G2.test_sanity). G2.test_sanity jest
+      w `warn_only` (kamień 4, świeża bramka), więc oczekiwany werdykt to
+      PASS z ostrzeżeniem `sanity.blocking_count`, nie BLOCK — ten fixture
+      ma zacząć failować w dniu, w którym ktoś zdejmie `warn_only` bez
+      sprawdzenia, czy reguła rzeczywiście działa.
+    fixture: test-bez-asercji
+    expect:
+      verdict: PASS
+      warning_rules: [sanity.blocking_count]

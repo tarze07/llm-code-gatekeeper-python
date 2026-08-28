@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 TEST_FUNC_PREFIX = "test"
 TEST_CLASS_PREFIX = "Test"
@@ -32,6 +32,12 @@ class TestItem:
     markers: frozenset[str]
     body_hash: str
     lineno: int
+    #: Węzeł AST testu — potrzebny `G2.test_sanity` do analizy treści.
+    #: Poza porównaniem (`compare=False`): `changed_tests()` porównuje po
+    #: `body_hash`, a węzły AST i tak nie mają sensownej równości.
+    node: ast.FunctionDef | ast.AsyncFunctionDef | None = field(
+        default=None, compare=False, repr=False
+    )
 
     @property
     def nodeid(self) -> str:
@@ -64,6 +70,7 @@ def collect_tests(source: str, path: str) -> dict[str, TestItem]:
             markers=_markers(node),
             body_hash=_body_hash(node),
             lineno=node.lineno,
+            node=node,
         )
         items[item.nodeid] = item
 
@@ -86,6 +93,7 @@ def collect_tests(source: str, path: str) -> dict[str, TestItem]:
                             markers=item.markers | class_markers,
                             body_hash=item.body_hash,
                             lineno=item.lineno,
+                            node=item.node,
                         )
     return items
 

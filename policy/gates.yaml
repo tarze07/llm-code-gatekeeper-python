@@ -45,6 +45,9 @@ thresholds:
   static.high_severity_count:
     max: 0
     message: "Ruff/mypy zgłaszają defekt w zmienionych liniach (nie styl — realny błąd)."
+  sanity.blocking_count:
+    max: 0
+    message: "Nowy test nie dowodzi niczego — brak asercji albo asercja na stałą (G2.test_sanity)."
   sast.critical_count:
     max: 0
     message: "Reguła „nigdy” trafiła w zmienionych liniach — patrz rules/semgrep/never.yaml."
@@ -74,6 +77,7 @@ max_findings_reported: 10
 # i dopiero potem włączamy blokowanie.
 warn_only:
   - G2.cross_verify # USUŃ po tygodniu obserwacji i przeglądzie fałszywych alarmów
+  - G2.test_sanity # kamień 4, nowa — USUŃ po tygodniu obserwacji
   - G1.static # kamień 3, nowa — USUŃ po tygodniu obserwacji
   - G3.sast # kamień 3, nowa — USUŃ po tygodniu obserwacji
   - G3.sca # kamień 3, nowa — USUŃ po tygodniu obserwacji i sprawdzeniu limitu sieci w CI
