@@ -67,3 +67,31 @@ cases:
     expect:
       verdict: BLOCK
       blocking_rules: [diff.effective_lines]
+
+  - name: sekret-w-diffie
+    description: >-
+      Agent zostawia klucz AWS w diffie (syntetyczny klucz w poprawnym
+      formacie, nie prawdziwy sekret — kanoniczny przykład z dokumentacji
+      AWS, `AKIAIOSFODNN7EXAMPLE`, jest celowo na globalnej allowliście
+      gitleaksa i nie nadaje się do tego fixture'u). G3.secrets nie jest
+      w `warn_only`, więc musi blokować naprawdę, nie tylko ostrzegać.
+    fixture: sekret-w-diffie
+    requires_tools: [gitleaks]
+    expect:
+      verdict: BLOCK
+      blocking_rules: [secrets.found_in_diff]
+
+  - name: test-bez-dowodu
+    description: >-
+      Nowy test asertuje zachowanie, które w tym PR-ze się nie zmieniło —
+      klasyczny „test, który niczego nie dowodzi" (PLAN.md §1, TOOLS.md
+      §4.1). Musi przejść na kodzie sprzed zmiany, czyli wyzwolić
+      `tests.pass_on_pre_change_code`. G2.cross_verify jest na razie
+      w `warn_only` (kamień 3, świeża bramka), więc oczekiwany werdykt to
+      PASS z ostrzeżeniem, nie BLOCK — analogicznie do `eval-na-wejsciu`.
+      Ma zacząć failować w dniu, w którym ktoś zdejmie `warn_only` bez
+      sprawdzenia, czy reguła rzeczywiście działa.
+    fixture: test-bez-dowodu
+    expect:
+      verdict: PASS
+      warning_rules: [tests.pass_on_pre_change_code]
