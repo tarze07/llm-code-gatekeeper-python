@@ -67,6 +67,9 @@ pypi = "gatekeeper.deps.ecosystems:PyPIEcosystem"
 npm = "gatekeeper.deps.ecosystems:NpmEcosystem"
 nuget = "gatekeeper.deps.ecosystems:NuGetEcosystem"
 
+[project.entry-points."gatekeeper.test_toolchains"]
+python = "gatekeeper.testing.toolchain:PythonTestToolchain"
+
 [tool.setuptools.packages.find]
 include = ["gatekeeper*"]
 

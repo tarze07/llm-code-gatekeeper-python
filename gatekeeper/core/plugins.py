@@ -118,21 +118,40 @@ class DiscoveryResult(Protocol):
     """Wynik odkrywania testów — kształt zgodny z dzisiejszym
     `testing.discovery.TestItem`, niezależny od języka."""
 
+    file: str
+    name: str
+    body_hash: str
+    lineno: int
+    nodeid: str
+    declared_escape: str | None
+
 
 class QualityIssue(Protocol):
     """Kształt zgodny z dzisiejszym `testing.quality.QualityIssue`."""
 
+    rule_id: str
+    severity: Any
+    title: str
+    failure_scenario: str
+    evidence: dict[str, Any]
 
-class CrossVerifyOutcome(Protocol):
-    """Kształt zgodny z dzisiejszym wynikiem `pytest_runner.run_pytest` +
-    rozróżnieniem asercja-poległa / błąd-kompilacji-lub-importu."""
+
+class TestOutcome(Protocol):
+    """Kształt zgodny z dzisiejszym `pytest_runner.TestOutcome` — rozróżnia
+    asercję poległą od błędu kompilacji/importu (`outcome` przyjmuje m.in.
+    `"failed"`, `"error"`, `"missing"`, `"skipped"`)."""
+
+    nodeid: str
+    outcome: str
 
 
 class CoverageReport(Protocol):
-    path: Path
-    #: `"cobertura"` (coverlet, coverage.py) albo `"lcov"` (nyc/c8/vitest) —
-    #: `core.diffcover.run_diff_cover_on_report` wspiera oba.
-    format: str
+    """Kształt zgodny z dzisiejszym `adapters.coverage.DiffCoverageResult`
+    (patrz uwaga o zakresie w `testing/toolchain.py`: docelowo, gdy TS/C#
+    dostaną własne toolchainy, ten protokół zwęzi się do surowego raportu
+    Cobertura/LCOV konsumowanego centralnie przez `core.diffcover`)."""
+
+    files: dict[str, Any]
 
 
 class TestToolchain(Protocol):
@@ -144,11 +163,13 @@ class TestToolchain(Protocol):
 
     def discover_tests(self, change: ChangeContext) -> list[DiscoveryResult]: ...
 
-    def lint_quality(self, tests: list[DiscoveryResult]) -> list[QualityIssue]: ...
+    def lint_quality(
+        self, change: ChangeContext, tests: list[DiscoveryResult]
+    ) -> list[tuple[DiscoveryResult, QualityIssue]]: ...
 
     def run_cross_verify(
         self, change: ChangeContext, tests: list[DiscoveryResult], config: dict[str, Any]
-    ) -> CrossVerifyOutcome: ...
+    ) -> tuple[dict[str, TestOutcome], str]: ...
 
     def produce_coverage_report(
         self, change: ChangeContext, config: dict[str, Any]

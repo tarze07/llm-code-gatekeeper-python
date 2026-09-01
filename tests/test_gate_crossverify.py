@@ -12,6 +12,7 @@ import pytest
 from gatekeeper.core.change import ChangeContext
 from gatekeeper.core.runner import network_isolation_available
 from gatekeeper.gates.g2_crossverify import CrossVerify
+from gatekeeper.testing.toolchain import PythonTestToolchain
 
 BASE_CODE = """
 def cena(x):
@@ -171,10 +172,10 @@ def test_kod_produkcyjny_nie_jest_przenoszony_do_kopii_bazowej(repo):
         HEAD_CODE,
         "from calc import cena\n\n\ndef test_rabat():\n    assert cena(100, rabat=0.5) == 61.5\n",
     )
-    gate = CrossVerify({})
+    toolchain = PythonTestToolchain()
 
     with change.worktree_at(change.base_sha) as worktree:
-        gate._overlay_tests(change, worktree)
+        toolchain._overlay_tests(change, worktree)
         assert (worktree / "calc.py").read_text() == BASE_CODE  # kod bazowy nietknięty
         assert "rabat" in (worktree / "tests" / "test_calc.py").read_text()  # test z head
 

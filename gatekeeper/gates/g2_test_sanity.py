@@ -6,21 +6,29 @@ czy test w ogóle ma szansę czegoś dowieść, niezależnie od tego, jaki kod
 sprawdza: brak asercji, asercja na stałą, mock porównywany z samym sobą,
 asercja wyłącznie `is not None`, połknięty wyjątek.
 
-Zakres: wyłącznie nowe/zmodyfikowane testy w diffie (`testing.discovery`,
-to samo źródło co `G2.cross_verify`) — stary dług testowy repo to osobna
-sprawa, tu chodzi o to, co dokłada ta konkretna zmiana.
+Ta bramka sama nie ma logiki językowej — jak `G2.cross_verify`, jest
+agregatorem poziomu 1 (`core/plugins.py`) po zainstalowanych `TestToolchain`
+(`gatekeeper.test_toolchains`). Zakres: wyłącznie nowe/zmodyfikowane testy
+w diffie — stary dług testowy repo to osobna sprawa, tu chodzi o to, co
+dokłada ta konkretna zmiana.
 """
 
 from __future__ import annotations
 
-import ast
 import time
+from importlib.metadata import entry_points
 from typing import Any
 
 from ..core.change import ChangeContext
 from ..core.finding import Finding, GateResult, Severity
-from ..testing import discovery, quality
+from ..core.plugins import DiscoveryResult, QualityIssue, TestToolchain
 from . import Gate, register
+
+TOOLCHAIN_GROUP = "gatekeeper.test_toolchains"
+
+
+def _installed_toolchains() -> list[TestToolchain]:
+    return [ep.load()() for ep in entry_points(group=TOOLCHAIN_GROUP)]
 
 
 @register
@@ -40,30 +48,25 @@ class TestSanity(Gate):
         started = time.monotonic()
         facts = _empty_facts()
 
-        items: list[discovery.TestItem] = []
+        toolchains = _installed_toolchains()
+        if not toolchains:
+            return self.result(
+                status="skipped",
+                duration_s=time.monotonic() - started,
+                facts=facts,
+                message="brak zainstalowanego toolchaina testowego "
+                f"(entry points `{TOOLCHAIN_GROUP}`)",
+            )
+
+        items: list[DiscoveryResult] = []
         findings: list[Finding] = []
-
-        for file in change.files:
-            if not file.test or file.status == "D" or not file.path.endswith(".py"):
+        for toolchain in toolchains:
+            tests = toolchain.discover_tests(change)
+            if not tests:
                 continue
-            head_source = change.file_at(change.head_sha, file.path)
-            if head_source is None:
-                continue
-            base_source = change.file_at(change.base_sha, file.path) or ""
-            file_items = discovery.changed_tests(base_source, head_source, file.path)
-            if not file_items:
-                continue
-            items.extend(file_items)
-
-            # `changed_tests` już sparsowało `head_source` bez błędu (inaczej
-            # zwróciłoby pustą listę) — tu parsujemy drugi raz tylko po to,
-            # żeby wyłowić funkcje pomocnicze zdefiniowane obok testów.
-            helpers = quality.module_helpers_of(ast.parse(head_source))
-            for item in file_items:
-                if item.node is None:  # pragma: no cover - zawsze ustawione przez collect_tests
-                    continue
-                for issue in quality.check_test(item.node, helpers):
-                    findings.append(_to_finding(self.id, item, issue))
+            items.extend(tests)
+            for item, issue in toolchain.lint_quality(change, tests):
+                findings.append(_to_finding(self.id, item, issue))
 
         facts["sanity.checked_count"] = len(items)
         if not items:
@@ -98,7 +101,7 @@ def _empty_facts() -> dict[str, Any]:
     }
 
 
-def _to_finding(gate_id: str, item: discovery.TestItem, issue: quality.QualityIssue) -> Finding:
+def _to_finding(gate_id: str, item: DiscoveryResult, issue: QualityIssue) -> Finding:
     return Finding(
         gate=gate_id,
         rule_id=issue.rule_id,
