@@ -5,30 +5,39 @@ Blokujemy wyłącznie na podatnościach w pakietach, które ten PR **wprowadza**
 — dług w już zastanych zależnościach to osobny raport tygodniowy, nie
 blokada tej zmiany (TOOLS.md §5.1).
 
-Trzy ekosystemy, jedna bramka, jedna decyzja — polityka nie musi znać
-podziału na PyPI/npm/NuGet. `sca.checked_ecosystems` w faktach mówi, które
-z nich faktycznie miały nowe zależności w tym PR-ze.
+Ta bramka sama nie ma logiki per-ekosystem — jest agregatorem poziomu 1
+(`core/plugins.py`): grupuje nowe zależności po `dep.ecosystem`, dla każdej
+grupy woła `EcosystemProvider.scan_sca()` zainstalowanego dostawcy
+(`gatekeeper.dep_ecosystems`, te same providery co `G1.deps`,
+`deps/ecosystems.py`) i sumuje wynik. Nowy ekosystem to nowy provider, nie
+zmiana w tym pliku. `sca.checked_ecosystems` w faktach mówi, które
+z zainstalowanych ekosystemów faktycznie miały nowe zależności w tym PR-ze.
 
 pip-audit i npm audit muszą dostać sieć — pytają o znane podatności w
 PyPI/OSV i w bazie doradczej npm. NuGet tak samo (`dotnet list package
---vulnerable` pyta usługę NuGet-a). To jedyna bramka z dostępem do sieci;
-`network=True` jest tu jawne, nie domyślne (`core.runner`).
+--vulnerable` pyta usługę NuGet-a). To jedyna bramka z dostępem do sieci —
+sandboxy z odpowiednią polityką buduje sam provider (`scan_sca`), nie ta
+bramka.
 """
 
 from __future__ import annotations
 
-import tempfile
 import time
-from pathlib import Path
+from importlib.metadata import entry_points
 from typing import Any
 
-from ..adapters import dotnet, sca
-from ..adapters.base import ToolFailed, ToolMissing
+from ..adapters.base import ToolMissing
 from ..core.change import ChangeContext
 from ..core.finding import Finding, GateResult
-from ..core.runner import Sandbox, SandboxPolicy
+from ..core.plugins import EcosystemProvider
 from ..deps import manifests
 from . import Gate, register
+
+DEP_ECOSYSTEM_GROUP = "gatekeeper.dep_ecosystems"
+
+
+def _installed_ecosystems() -> dict[str, EcosystemProvider]:
+    return {ep.name: ep.load()() for ep in entry_points(group=DEP_ECOSYSTEM_GROUP)}
 
 
 @register
@@ -49,7 +58,8 @@ class ScaGuard(Gate):
         started = time.monotonic()
         facts = _empty_facts()
 
-        by_ecosystem = self._new_deps_by_ecosystem(change)
+        providers = _installed_ecosystems()
+        by_ecosystem = self._new_deps_by_ecosystem(change, list(providers.values()))
         total_new = sum(len(deps) for deps in by_ecosystem.values())
         if not total_new:
             return self.result(
@@ -62,41 +72,28 @@ class ScaGuard(Gate):
         facts["sca.checked_ecosystems"] = sorted(by_ecosystem)
 
         require_tool = bool(self.config.get("require_tool", True))
+        keep_env = tuple(self.config.get("keep_env", ()))
         findings: list[Finding] = []
         unresolved: list[str] = []
 
-        if manifests.PYPI in by_ecosystem:
-            outcome = self._check_pypi(change, by_ecosystem[manifests.PYPI], findings, unresolved)
-            if outcome is not None:
+        for ecosystem, deps in by_ecosystem.items():
+            provider = next((p for p in providers.values() if p.ecosystem == ecosystem), None)
+            if provider is None:  # pragma: no cover - by_ecosystem już filtruje po providers
+                continue
+            try:
+                outcome = provider.scan_sca(
+                    change.repo, self.id, deps, timeout_s=self.budget_s, keep_env=keep_env
+                )
+            except ToolMissing as exc:
                 facts["sca.tool_available"] = False
                 return self.result(
                     status="error" if require_tool else "skipped",
                     duration_s=time.monotonic() - started,
                     facts=facts,
-                    message=outcome,
+                    message=str(exc),
                 )
-
-        if manifests.NPM in by_ecosystem:
-            outcome = self._check_npm(change, by_ecosystem[manifests.NPM], findings, unresolved)
-            if outcome is not None:
-                facts["sca.tool_available"] = False
-                return self.result(
-                    status="error" if require_tool else "skipped",
-                    duration_s=time.monotonic() - started,
-                    facts=facts,
-                    message=outcome,
-                )
-
-        if manifests.NUGET in by_ecosystem:
-            outcome = self._check_nuget(change, by_ecosystem[manifests.NUGET], findings, unresolved)
-            if outcome is not None:
-                facts["sca.tool_available"] = False
-                return self.result(
-                    status="error" if require_tool else "skipped",
-                    duration_s=time.monotonic() - started,
-                    facts=facts,
-                    message=outcome,
-                )
+            findings.extend(outcome.findings)
+            unresolved.extend(outcome.unresolved)
 
         vulnerable_packages = {f.evidence.get("package") for f in findings}
         facts["sca.finding_count"] = len(findings)
@@ -119,128 +116,26 @@ class ScaGuard(Gate):
             message=message,
         )
 
-    # ------------------------------------------------------------------ pypi
-
-    def _check_pypi(
-        self,
-        change: ChangeContext,
-        deps: list[manifests.Dependency],
-        findings: list[Finding],
-        unresolved: list[str],
-    ) -> str | None:
-        sandbox = Sandbox(
-            SandboxPolicy(network=True, timeout_s=self.budget_s, keep_env=self._keep_env())
-        )
-        # Jeden pakiet na wywołanie, NIE jeden requirements.txt na wszystkie
-        # nowe zależności naraz: `pip-audit -r` rozwiązuje cały plik jako
-        # jedną całość, więc pojedynczy nieistniejący/halucynowany pakiet
-        # (który i tak osobno łapie G1.deps) wywala rozwiązywanie dla
-        # WSZYSTKICH nowych zależności naraz i gasi dowód na resztę.
-        for dep in deps:
-            name = manifests.normalize(manifests.PYPI, dep.name)
-            with tempfile.TemporaryDirectory(prefix="gatekeeper-sca-") as tmp:
-                requirements = Path(tmp) / "requirements.txt"
-                requirements.write_text((dep.raw or dep.name) + "\n", encoding="utf-8")
-                try:
-                    findings.extend(
-                        sca.run_pip_audit(
-                            change.repo,
-                            sandbox,
-                            self.id,
-                            requirements=requirements,
-                            new_packages={name},
-                            manifest=dep.manifest,
-                            timeout_s=self.budget_s,
-                        )
-                    )
-                except ToolMissing as exc:
-                    return str(exc)
-                except ToolFailed:
-                    # Ten jeden pakiet się nie rozwiązał — zwykle dlatego, że
-                    # nie istnieje, co G1.deps już zgłasza osobno. Brak dowodu
-                    # dla NIEGO nie ma prawa zgasić dowodu dla reszty.
-                    unresolved.append(name)
-        return None
-
-    # ------------------------------------------------------------------- npm
-
-    def _check_npm(
-        self,
-        change: ChangeContext,
-        deps: list[manifests.Dependency],
-        findings: list[Finding],
-        unresolved: list[str],
-    ) -> str | None:
-        sandbox = Sandbox(
-            SandboxPolicy(network=True, timeout_s=self.budget_s, keep_env=self._keep_env())
-        )
-        names = {manifests.normalize(manifests.NPM, d.name) for d in deps}
-        try:
-            findings.extend(sca.run_npm_audit(change.repo, sandbox, self.id, names))
-        except ToolMissing as exc:
-            return str(exc)
-        except ToolFailed:
-            # Cały ekosystem naraz (brak `package-lock.json`, npm padł) —
-            # ta partia nowych pakietów zostaje bez dowodu, reszta bramki nie.
-            unresolved.extend(sorted(names))
-        return None
-
-    # ----------------------------------------------------------------- nuget
-
-    def _check_nuget(
-        self,
-        change: ChangeContext,
-        deps: list[manifests.Dependency],
-        findings: list[Finding],
-        unresolved: list[str],
-    ) -> str | None:
-        # CoreCLR rezerwuje kilka GB przestrzeni adresowej na starcie
-        # niezależnie od realnego zużycia (jak semgrep, gates/g3_sast.py) —
-        # RLIMIT_AS z domyślnej polityki zabija `dotnet` kodem 137.
-        sandbox = Sandbox(
-            SandboxPolicy(
-                network=True, timeout_s=self.budget_s, memory_mb=None, keep_env=self._keep_env()
-            )
-        )
-        by_project: dict[str, set[str]] = {}
-        for dep in deps:
-            name = manifests.normalize(manifests.NUGET, dep.name)
-            project = dotnet.project_for_manifest(change.repo, dep.manifest)
-            if project is None:
-                unresolved.append(name)
-                continue
-            by_project.setdefault(project, set()).add(name)
-
-        for project, names in by_project.items():
-            try:
-                findings.extend(
-                    dotnet.run_dotnet_list_vulnerable(
-                        change.repo, sandbox, self.id, project, names, timeout_s=self.budget_s
-                    )
-                )
-            except ToolMissing as exc:
-                return str(exc)
-            except ToolFailed:
-                unresolved.extend(sorted(names))
-        return None
-
     # ------------------------------------------------------------------
 
-    def _keep_env(self) -> tuple[str, ...]:
-        return tuple(self.config.get("keep_env", ()))
-
     def _new_deps_by_ecosystem(
-        self, change: ChangeContext
+        self, change: ChangeContext, providers: list[EcosystemProvider]
     ) -> dict[str, list[manifests.Dependency]]:
         changed_manifests = [
-            f for f in change.files if manifests.is_manifest(f.path) and f.status != "D"
+            f
+            for f in change.files
+            if f.status != "D" and any(p.is_manifest(f.path) for p in providers)
         ]
         by_ecosystem: dict[str, list[manifests.Dependency]] = {}
         for changed in changed_manifests:
             head = change.file_at(change.head_sha, changed.path) or ""
             base = change.file_at(change.base_sha, changed.path) or ""
-            after = manifests.parse_manifest(changed.path, head)
-            before = manifests.parse_manifest(changed.path, base)
+            after: set[manifests.Dependency] = set()
+            before: set[manifests.Dependency] = set()
+            for provider in providers:
+                if provider.is_manifest(changed.path):
+                    after |= provider.parse_manifest(changed.path, head)
+                    before |= provider.parse_manifest(changed.path, base)
             for dep in manifests.diff_dependencies(before, after):
                 by_ecosystem.setdefault(dep.ecosystem, []).append(dep)
         return by_ecosystem

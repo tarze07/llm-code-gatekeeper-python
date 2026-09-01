@@ -62,6 +62,11 @@ python = "gatekeeper.adapters.linters:PythonStaticChecker"
 ts_js = "gatekeeper.adapters.linters:TsJsStaticChecker"
 csharp = "gatekeeper.adapters.dotnet:CsharpStaticChecker"
 
+[project.entry-points."gatekeeper.dep_ecosystems"]
+pypi = "gatekeeper.deps.ecosystems:PyPIEcosystem"
+npm = "gatekeeper.deps.ecosystems:NpmEcosystem"
+nuget = "gatekeeper.deps.ecosystems:NuGetEcosystem"
+
 [tool.setuptools.packages.find]
 include = ["gatekeeper*"]
 

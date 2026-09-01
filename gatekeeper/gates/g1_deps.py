@@ -7,23 +7,37 @@ to, co agent zmyślił (PLAN.md §1).
 
 Wersja z kamienia 1: **istnienie, wiek, typosquat**. Pobrania, repo źródłowe
 i importy niezadeklarowane w manifeście dochodzą w kamieniu 3.
+
+Wykrywanie i parsowanie manifestów idzie przez zainstalowanych dostawców
+`gatekeeper.dep_ecosystems` (`EcosystemProvider`, `core/plugins.py`) —
+bramka sama nie wie, jak wygląda manifest PyPI/npm/NuGet, tylko że
+`provider.is_manifest(path)`/`provider.parse_manifest(...)` istnieją. Nowy
+ekosystem to nowy zarejestrowany provider, nie zmiana w tym pliku.
 """
 
 from __future__ import annotations
 
 import time
+from importlib.metadata import entry_points
 from typing import Any
 
 from ..core.change import ChangeContext
 from ..core.finding import Finding, GateResult, Severity
+from ..core.plugins import EcosystemProvider
 from ..deps import manifests, typosquat
-from ..deps.registries import Registry, RegistryUnavailable, default_registries
+from ..deps.registries import Registry, RegistryUnavailable
 from . import Gate, register
 
 DEFAULT_MIN_AGE_DAYS = 90
 #: Poniżej tego wieku „podobna nazwa" jest podejrzana. Powyżej — to po prostu
 #: ustabilizowany pakiet, który przypadkiem nazywa się podobnie.
 TYPOSQUAT_AGE_DAYS = 365
+
+DEP_ECOSYSTEM_GROUP = "gatekeeper.dep_ecosystems"
+
+
+def installed_ecosystems() -> list[EcosystemProvider]:
+    return [ep.load()() for ep in entry_points(group=DEP_ECOSYSTEM_GROUP)]
 
 
 @register
@@ -51,20 +65,34 @@ class DepGuard(Gate):
         self._registries = registries
         self.min_age_days = float(self.config.get("min_age_days", DEFAULT_MIN_AGE_DAYS))
         self.internal_prefixes: list[str] = list(self.config.get("internal_prefixes", []))
+        self._providers: list[EcosystemProvider] | None = None
         self.allowlist = {
             manifests.normalize(manifests.PYPI, n) for n in self.config.get("allow_packages", [])
         }
 
     @property
+    def providers(self) -> list[EcosystemProvider]:
+        if self._providers is None:
+            self._providers = installed_ecosystems()
+        return self._providers
+
+    @property
     def registries(self) -> dict[str, Registry]:
         if self._registries is None:
-            self._registries = default_registries()
+            from ..deps.registries import DEFAULT_CACHE_DIR
+
+            self._registries = {
+                p.ecosystem: p.build_registry(DEFAULT_CACHE_DIR) for p in self.providers
+            }
         return self._registries
 
     def run(self, change: ChangeContext) -> GateResult:
         started = time.monotonic()
+        providers = self.providers
         changed_manifests = [
-            f for f in change.files if manifests.is_manifest(f.path) and f.status != "D"
+            f
+            for f in change.files
+            if f.status != "D" and any(p.is_manifest(f.path) for p in providers)
         ]
         if not changed_manifests:
             return self.result(
@@ -78,8 +106,12 @@ class DepGuard(Gate):
         for changed in changed_manifests:
             head = change.file_at(change.head_sha, changed.path) or ""
             base = change.file_at(change.base_sha, changed.path) or ""
-            after = manifests.parse_manifest(changed.path, head)
-            before = manifests.parse_manifest(changed.path, base)
+            after: set[manifests.Dependency] = set()
+            before: set[manifests.Dependency] = set()
+            for provider in providers:
+                if provider.is_manifest(changed.path):
+                    after |= provider.parse_manifest(changed.path, head)
+                    before |= provider.parse_manifest(changed.path, base)
             new_deps.extend(manifests.diff_dependencies(before, after))
 
         new_deps = [d for d in new_deps if not self._is_internal(d)]
@@ -123,7 +155,12 @@ class DepGuard(Gate):
     # ------------------------------------------------------------------
 
     def _is_internal(self, dep: manifests.Dependency) -> bool:
-        name = manifests.normalize(dep.ecosystem, dep.name)
+        provider = next((p for p in self.providers if p.ecosystem == dep.ecosystem), None)
+        name = (
+            provider.normalize(dep.name)
+            if provider
+            else manifests.normalize(dep.ecosystem, dep.name)
+        )
         if name in self.allowlist:
             return True
         return any(name.startswith(p.lower()) for p in self.internal_prefixes)

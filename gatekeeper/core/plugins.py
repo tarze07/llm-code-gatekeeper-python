@@ -28,7 +28,6 @@ from typing import Any, Protocol
 
 from .change import ChangeContext
 from .finding import Finding
-from .runner import Sandbox
 
 # ---------------------------------------------------------------- G1.static
 
@@ -61,6 +60,16 @@ class StaticChecker(Protocol):
 # ------------------------------------------------------------ G1.deps / G3.sca
 
 
+@dataclass
+class EcosystemScaResult:
+    findings: list[Finding] = field(default_factory=list)
+    #: Nazwy pakietów, dla których to konkretne SCA nie dało dowodu (np.
+    #: pojedynczy pakiet nie rozwiązał się w pip-audit) — częściowa awaria
+    #: NIE ma prawa zgasić dowodu dla reszty nowych zależności tego samego
+    #: ekosystemu, więc nie jest wyjątkiem, tylko wpisem na tej liście.
+    unresolved: list[str] = field(default_factory=list)
+
+
 class EcosystemProvider(Protocol):
     """Manifest + rejestr + typosquat + SCA jednego ekosystemu pakietów
     (PyPI/npm/NuGet/...)."""
@@ -88,14 +97,17 @@ class EcosystemProvider(Protocol):
     def scan_sca(
         self,
         repo: Path,
-        sandbox: Sandbox,
         gate_id: str,
         deps: list[Any],
         timeout_s: float,
         keep_env: tuple[str, ...],
-    ) -> list[Finding]:
-        """Skan podatności na nowo dodanych zależnościach. Rzuca
-        `adapters.base.ToolMissing`/`ToolFailed` jak dzisiejsze adaptery."""
+    ) -> EcosystemScaResult:
+        """Skan podatności na nowo dodanych zależnościach. Sandbox (sieć
+        włączona zawsze, `memory_mb` zależnie od narzędzia — kwirk CoreCLR
+        dla NuGet) buduje sam dostawca, nie agregator: tylko on wie, czego
+        jego narzędzie potrzebuje. Rzuca `adapters.base.ToolMissing` przy
+        całkowitym braku narzędzia — to jedyny przypadek, w którym cały
+        ekosystem zostaje bez dowodu."""
         ...
 
 
