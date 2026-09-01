@@ -24,10 +24,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+from ..core.change import ChangeContext
 from ..core.finding import Finding, Severity
-from ..core.runner import Sandbox
-from .base import parse_compiler_diagnostics, relative_to_repo, run_tool
+from ..core.plugins import StaticCheckOutcome
+from ..core.runner import Sandbox, SandboxPolicy
+from .base import ToolFailed, ToolMissing, parse_compiler_diagnostics, relative_to_repo, run_tool
 
 DOTNET = "dotnet"
 
@@ -116,6 +119,75 @@ def run_dotnet_build(
     # dotnet build: 0 = czysto (mogą być ostrzeżenia), 1 = błędy kompilacji
     result = run_tool(command, repo, sandbox, timeout_s, ok_returncodes=(0, 1))
     return parse_dotnet_build(result.stdout, repo, gate)
+
+
+class CsharpStaticChecker:
+    """`StaticChecker` dla C#: `dotnet build`. 1:1 przeniesienie dawnej
+    `g1_static.py::StaticGuard._run_csharp`."""
+
+    checker_id = "csharp"
+    languages = ("csharp",)
+
+    def empty_facts(self) -> dict[str, Any]:
+        return {
+            "static.csharp_files_checked": 0,
+            "static.csproj_found": False,
+            "static.dotnet_available": True,
+        }
+
+    def check(
+        self, change: ChangeContext, config: dict[str, Any], gate_id: str, budget_s: float
+    ) -> StaticCheckOutcome:
+        facts = self.empty_facts()
+        findings: list[Finding] = []
+        cs_files = [
+            f.path for f in change.effective_files if f.language == "csharp" and f.status != "D"
+        ]
+        facts["static.csharp_files_checked"] = len(cs_files)
+        if not cs_files:
+            return StaticCheckOutcome(findings=findings, facts=facts)
+
+        projects = projects_for(change.repo, cs_files)
+        facts["static.csproj_found"] = bool(projects)
+        if not projects:
+            return StaticCheckOutcome(findings=findings, facts=facts)
+
+        require_dotnet = bool(config.get("require_dotnet_build", False))
+        # CoreCLR rezerwuje kilka GB przestrzeni adresowej na starcie
+        # niezależnie od realnego zużycia — jak silnik OCaml semgrepa
+        # (gates/g3_sast.py). Twardy RLIMIT_AS zabija `dotnet` kodem 137
+        # zamiast czytelnym błędem; zweryfikowane na żywym SDK.
+        sandbox = Sandbox(
+            SandboxPolicy(
+                network=False,
+                timeout_s=budget_s,
+                memory_mb=None,
+                keep_env=tuple(config.get("keep_env", ())),
+            )
+        )
+
+        for project in projects:
+            try:
+                findings.extend(
+                    run_dotnet_build(
+                        change.repo,
+                        sandbox,
+                        gate_id,
+                        project=project,
+                        timeout_s=budget_s / max(len(projects), 1),
+                        args=list(config.get("dotnet_args", [])),
+                    )
+                )
+            except ToolMissing as exc:
+                facts["static.dotnet_available"] = False
+                if require_dotnet:
+                    return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+                break  # brak `dotnet` raz = brak dla wszystkich projektów
+            except ToolFailed as exc:
+                if require_dotnet:
+                    return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+                facts["static.dotnet_available"] = False
+        return StaticCheckOutcome(findings=findings, facts=facts)
 
 
 # --------------------------------------------------------------------------

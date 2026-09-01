@@ -10,10 +10,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+from ..core.change import ChangeContext
 from ..core.finding import Finding, Severity
-from ..core.runner import Sandbox
-from .base import parse_compiler_diagnostics, parse_sarif, relative_to_repo, run_tool
+from ..core.plugins import StaticCheckOutcome
+from ..core.runner import Sandbox, SandboxPolicy
+from .base import (
+    ToolFailed,
+    ToolMissing,
+    parse_compiler_diagnostics,
+    parse_sarif,
+    relative_to_repo,
+    run_tool,
+)
 
 RUFF = "ruff"
 MYPY = "mypy"
@@ -111,6 +121,79 @@ def run_mypy(
     # mypy: 0 = czysto, 1 = znalezione błędy, 2 = błąd użycia
     result = run_tool(command, repo, sandbox, timeout_s, ok_returncodes=(0, 1))
     return parse_mypy(result.stdout, repo, gate)
+
+
+class PythonStaticChecker:
+    """`StaticChecker` (`core/plugins.py`) dla Pythona: ruff + mypy.
+
+    1:1 przeniesienie dawnej `g1_static.py::StaticGuard._run_python` — sama
+    logika się nie zmieniła, zmienił się tylko sposób, w jaki `G1.static`
+    ją odnajduje (dispatch przez `gatekeeper.static_checkers`, nie prywatna
+    metoda bramki)."""
+
+    checker_id = "python"
+    languages = ("python",)
+
+    def empty_facts(self) -> dict[str, Any]:
+        return {
+            "static.python_files_checked": 0,
+            "static.ruff_available": True,
+            "static.mypy_available": True,
+        }
+
+    def check(
+        self, change: ChangeContext, config: dict[str, Any], gate_id: str, budget_s: float
+    ) -> StaticCheckOutcome:
+        facts = self.empty_facts()
+        findings: list[Finding] = []
+        python_files = [
+            f.path for f in change.effective_files if f.language == "python" and f.status != "D"
+        ]
+        facts["static.python_files_checked"] = len(python_files)
+        if not python_files:
+            return StaticCheckOutcome(findings=findings, facts=facts)
+
+        require_ruff = bool(config.get("require_ruff", True))
+        require_mypy = bool(config.get("require_mypy", False))
+        sandbox = Sandbox(
+            SandboxPolicy(
+                network=False, timeout_s=budget_s, keep_env=tuple(config.get("keep_env", ()))
+            )
+        )
+
+        try:
+            findings.extend(run_ruff(change.repo, sandbox, gate_id, timeout_s=budget_s / 4))
+        except ToolMissing as exc:
+            facts["static.ruff_available"] = False
+            if require_ruff:
+                # Brak narzędzia nie jest zieloną bramką — to brak dowodu.
+                return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+        except ToolFailed as exc:
+            return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+
+        try:
+            findings.extend(
+                run_mypy(
+                    change.repo,
+                    sandbox,
+                    gate_id,
+                    targets=python_files,
+                    timeout_s=budget_s / 4,
+                    args=list(config.get("mypy_args", [])),
+                )
+            )
+        except ToolMissing as exc:
+            facts["static.mypy_available"] = False
+            if require_mypy:
+                return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+        except ToolFailed as exc:
+            if require_mypy:
+                return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+            # mypy potrafi się wywrócić na błędzie konfiguracji (target spoza
+            # pakietu, brak stubów) — bez `require_mypy` to brak dowodu z tego
+            # narzędzia, nie defekt w kodzie PR-a.
+            facts["static.mypy_available"] = False
+        return StaticCheckOutcome(findings=findings, facts=facts)
 
 
 # --------------------------------------------------------------------------
@@ -242,3 +325,103 @@ def run_eslint(
     # eslint: 0 = czysto, 1 = znaleziska, 2 = błąd konfiguracji/użycia
     result = run_tool(command, repo, sandbox, timeout_s, ok_returncodes=(0, 1))
     return parse_eslint(result.stdout, repo, gate)
+
+
+_ESLINT_CONFIG_NAMES = (
+    ".eslintrc.js",
+    ".eslintrc.cjs",
+    ".eslintrc.json",
+    ".eslintrc.yaml",
+    ".eslintrc.yml",
+    "eslint.config.js",
+    "eslint.config.mjs",
+    "eslint.config.cjs",
+    "eslint.config.ts",
+)
+
+
+class TsJsStaticChecker:
+    """`StaticChecker` dla TS/JS: tsc + eslint. 1:1 przeniesienie dawnej
+    `g1_static.py::StaticGuard._run_ts_js`."""
+
+    checker_id = "ts_js"
+    languages = ("typescript", "javascript")
+
+    def empty_facts(self) -> dict[str, Any]:
+        return {
+            "static.ts_files_checked": 0,
+            "static.tsconfig_found": False,
+            "static.tsc_available": True,
+            "static.js_files_checked": 0,
+            "static.eslint_config_found": False,
+            "static.eslint_available": True,
+        }
+
+    def check(
+        self, change: ChangeContext, config: dict[str, Any], gate_id: str, budget_s: float
+    ) -> StaticCheckOutcome:
+        facts = self.empty_facts()
+        findings: list[Finding] = []
+        ts_files = [
+            f.path for f in change.effective_files if f.language == "typescript" and f.status != "D"
+        ]
+        js_files = [
+            f.path for f in change.effective_files if f.language == "javascript" and f.status != "D"
+        ]
+        facts["static.ts_files_checked"] = len(ts_files)
+        facts["static.js_files_checked"] = len(js_files)
+
+        require_tsc = bool(config.get("require_tsc", False))
+        require_eslint = bool(config.get("require_eslint", False))
+        sandbox = Sandbox(
+            SandboxPolicy(
+                network=False, timeout_s=budget_s, keep_env=tuple(config.get("keep_env", ()))
+            )
+        )
+
+        if ts_files:
+            tsconfig = change.repo / str(config.get("tsconfig_path", "tsconfig.json"))
+            facts["static.tsconfig_found"] = tsconfig.is_file()
+            if facts["static.tsconfig_found"]:
+                try:
+                    findings.extend(
+                        run_tsc(
+                            change.repo,
+                            sandbox,
+                            gate_id,
+                            timeout_s=budget_s / 4,
+                            args=list(config.get("tsc_args", [])),
+                        )
+                    )
+                except ToolMissing as exc:
+                    facts["static.tsc_available"] = False
+                    if require_tsc:
+                        return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+                except ToolFailed as exc:
+                    if require_tsc:
+                        return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+                    facts["static.tsc_available"] = False
+
+        if ts_files or js_files:
+            has_config = any((change.repo / name).is_file() for name in _ESLINT_CONFIG_NAMES)
+            facts["static.eslint_config_found"] = has_config
+            if has_config:
+                try:
+                    findings.extend(
+                        run_eslint(
+                            change.repo,
+                            sandbox,
+                            gate_id,
+                            timeout_s=budget_s / 4,
+                            args=list(config.get("eslint_args", [])),
+                        )
+                    )
+                except ToolMissing as exc:
+                    facts["static.eslint_available"] = False
+                    if require_eslint:
+                        return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+                except ToolFailed as exc:
+                    if require_eslint:
+                        return StaticCheckOutcome(findings=findings, facts=facts, error=str(exc))
+                    facts["static.eslint_available"] = False
+        return StaticCheckOutcome(findings=findings, facts=facts)

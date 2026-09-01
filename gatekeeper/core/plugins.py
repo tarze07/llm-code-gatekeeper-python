@@ -13,10 +13,11 @@ wyników to cała jej logika.
 
 Grupy entry points (deklarowane w `pyproject.toml` pack'a, `[project.entry-points."<grupa>"]`):
 
-- `gatekeeper.static_checkers`   → `StaticChecker`             (G1.static)
-- `gatekeeper.dep_ecosystems`    → `EcosystemProvider`         (G1.deps, G3.sca)
-- `gatekeeper.test_toolchains`   → `TestToolchain`              (G2.cross_verify, G2.test_sanity, G2.diff_coverage)
-- `gatekeeper.semgrep_rule_packs`→ `SemgrepRulePackProvider`   (G3.sast)
+- `gatekeeper.static_checkers`   → `StaticChecker`           (G1.static)
+- `gatekeeper.dep_ecosystems`    → `EcosystemProvider`       (G1.deps, G3.sca)
+- `gatekeeper.test_toolchains`   → `TestToolchain`           (G2.cross_verify, G2.test_sanity,
+                                                                G2.diff_coverage)
+- `gatekeeper.semgrep_rule_packs`→ `SemgrepRulePackProvider` (G3.sast)
 """
 
 from __future__ import annotations
@@ -28,7 +29,6 @@ from typing import Any, Protocol
 from .change import ChangeContext
 from .finding import Finding
 from .runner import Sandbox
-
 
 # ---------------------------------------------------------------- G1.static
 
@@ -54,7 +54,7 @@ class StaticChecker(Protocol):
     def empty_facts(self) -> dict[str, Any]: ...
 
     def check(
-        self, change: ChangeContext, config: dict[str, Any], budget_s: float
+        self, change: ChangeContext, config: dict[str, Any], gate_id: str, budget_s: float
     ) -> StaticCheckOutcome: ...
 
 

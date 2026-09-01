@@ -57,6 +57,11 @@ gatekeeper = "gatekeeper.cli:main"
 [project.entry-points."gatekeeper.semgrep_rule_packs"]
 "monolith" = "gatekeeper.adapters.semgrep:MonolithRulePack"
 
+[project.entry-points."gatekeeper.static_checkers"]
+python = "gatekeeper.adapters.linters:PythonStaticChecker"
+ts_js = "gatekeeper.adapters.linters:TsJsStaticChecker"
+csharp = "gatekeeper.adapters.dotnet:CsharpStaticChecker"
+
 [tool.setuptools.packages.find]
 include = ["gatekeeper*"]
 
