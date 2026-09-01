@@ -34,6 +34,29 @@ gates = [
 [project.scripts]
 gatekeeper = "gatekeeper.cli:main"
 
+# Bramki rejestrują się przez entry points, nie przez listę importów w
+# `gatekeeper/gates/__init__.py` — ten pakiet rejestruje tu swoje własne
+# dziesięć bramek (dogfooding mechanizmu pluginów, patrz `core/plugins.py`
+# i `gatekeeper/gates/__init__.py::all_gates()`).
+[project.entry-points."gatekeeper.gates"]
+"G0.provenance" = "gatekeeper.gates.g0_provenance:Provenance"
+"G0.scope" = "gatekeeper.gates.g0_scope:ScopeGuard"
+"G1.deps" = "gatekeeper.gates.g1_deps:DepGuard"
+"G1.static" = "gatekeeper.gates.g1_static:StaticGuard"
+"G2.cross_verify" = "gatekeeper.gates.g2_crossverify:CrossVerify"
+"G2.test_sanity" = "gatekeeper.gates.g2_test_sanity:TestSanity"
+"G2.diff_coverage" = "gatekeeper.gates.g2_diff_coverage:DiffCoverage"
+"G3.sast" = "gatekeeper.gates.g3_sast:SastGuard"
+"G3.sca" = "gatekeeper.gates.g3_sca:ScaGuard"
+"G3.secrets" = "gatekeeper.gates.g3_secrets:SecretsGate"
+
+# Reguły semgrep rejestrują się przez tę samą logikę (poziom 2, patrz
+# `core/plugins.py::SemgrepRulePackProvider`) — ten pakiet niesie dziś
+# całość `rules/semgrep/` jako jeden pack (podział per-język dopiero przy
+# fizycznym rozbiciu na repo).
+[project.entry-points."gatekeeper.semgrep_rule_packs"]
+"monolith" = "gatekeeper.adapters.semgrep:MonolithRulePack"
+
 [tool.setuptools.packages.find]
 include = ["gatekeeper*"]
 

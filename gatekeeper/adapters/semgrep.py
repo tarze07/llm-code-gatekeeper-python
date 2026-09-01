@@ -16,6 +16,11 @@ from ..core.runner import Sandbox
 from .base import relative_to_repo, run_tool
 
 SEMGREP = "semgrep"
+#: Ważne tylko dopóki `gatekeeper` jest monolitem: po fizycznym rozbiciu na
+#: pack'i per język ta stała znika — każdy pack niesie własny
+#: `rules/semgrep/never.yaml` jako `package-data`, odkrywany przez
+#: `importlib.resources`, nie przez wspinanie się po `__file__.parent`
+#: (dzisiejszy sposób nie przeżyłby instalacji z wheela).
 RULES_DIR = Path(__file__).resolve().parent.parent.parent / "rules" / "semgrep"
 
 SEVERITY = {
@@ -23,6 +28,18 @@ SEVERITY = {
     "WARNING": Severity.HIGH,
     "INFO": Severity.MEDIUM,
 }
+
+
+class MonolithRulePack:
+    """Jedyny dziś zarejestrowany `SemgrepRulePackProvider` (patrz
+    `core/plugins.py`) — niesie CAŁY `rules/semgrep/` jednym plikiem, bo
+    repo jeszcze nie jest rozbite na pack'i per język. Gdy to nastąpi, każdy
+    pack rejestruje własny provider zamiast tego."""
+
+    pack_id = "monolith"
+
+    def rules_dir(self) -> Path:
+        return RULES_DIR
 
 
 def parse_semgrep(payload: str, repo: Path, gate: str) -> list[Finding]:
@@ -61,15 +78,19 @@ def run_semgrep(
     repo: Path,
     sandbox: Sandbox,
     gate: str,
-    config: Path | str = RULES_DIR,
+    config: Path | str | list[Path | str] = RULES_DIR,
     targets: list[str] | None = None,
     timeout_s: float = 300.0,
     max_memory_mb: int = 2000,
 ) -> list[Finding]:
+    """`config` przyjmuje jeden katalog reguł albo listę — semgrep sam scala
+    wiele `--config` w jeden przebieg, więc agregacja pack'ów
+    (`SemgrepRulePackProvider`, `gates/g3_sast.py`) nie wymaga N uruchomień
+    narzędzia, tylko N flag w jednym."""
+    configs = config if isinstance(config, list) else [config]
     command = [
         SEMGREP,
-        "--config",
-        str(config),
+        *[part for c in configs for part in ("--config", str(c))],
         "--json",
         "--quiet",
         "--metrics=off",  # bez telemetrii: kod firmowy nie wychodzi na zewnątrz

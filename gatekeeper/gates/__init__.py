@@ -1,16 +1,24 @@
 """Rejestr bramek.
 
 Kontrakt jest jeden i celowo wąski: `Gate.run(ChangeContext) -> GateResult`.
-Nowa bramka nie wymaga dotykania rdzenia (TOOLS.md §9).
+Nowa bramka nie wymaga dotykania rdzenia (TOOLS.md §9) — dosłownie: bramki
+rejestrują się przez entry points (grupa `gatekeeper.gates`), nie przez
+wpisanie do listy importów tutaj. Ten pakiet (`gatekeeper`) rejestruje przez
+ten sam mechanizm swoje własne dziesięć bramek (`pyproject.toml`) — rdzeń
+je swój własny dogfood, więc mechanizm jest udowodniony niezależnie od tego,
+czy jakikolwiek zewnętrzny pakiet z bramkami jest w ogóle zainstalowany.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
+from importlib.metadata import entry_points
 from typing import Any
 
 from ..core.change import ChangeContext
 from ..core.finding import GateResult
+
+GATE_GROUP = "gatekeeper.gates"
 
 
 class Gate:
@@ -28,6 +36,15 @@ class Gate:
     def run(self, change: ChangeContext) -> GateResult:  # pragma: no cover - interfejs
         raise NotImplementedError
 
+    @classmethod
+    def declared_facts(cls) -> tuple[str, ...]:
+        """Domyślnie `cls.facts`. Bramki-agregatory (`G1.static`, `G1.deps`,
+        `G2.*`, `G3.sca`, `G3.sast`) nadpisują to, żeby dorzucić fakty ze
+        WSZYSTKICH zainstalowanych dostawców poziomu 2 (patrz `core/plugins.py`)
+        — inaczej `gatekeeper policy facts`/`policy lint` nie znałyby faktu
+        pluginu, którego akurat nie ma w danym środowisku."""
+        return cls.facts
+
     # pomocnicze
     def result(self, **kwargs: Any) -> GateResult:
         return GateResult(gate=self.id, **kwargs)
@@ -44,24 +61,15 @@ def register(cls: type[Gate]) -> type[Gate]:
 
 
 def all_gates() -> list[type[Gate]]:
-    from . import (  # noqa: F401  (rejestracja)
-        g0_provenance,
-        g0_scope,
-        g1_deps,
-        g1_static,
-        g2_crossverify,
-        g2_diff_coverage,
-        g2_test_sanity,
-        g3_sast,
-        g3_sca,
-        g3_secrets,
-    )
-
+    for ep in entry_points(group=GATE_GROUP):
+        cls = ep.load()
+        if cls.id not in REGISTRY:
+            register(cls)
     return [REGISTRY[k] for k in sorted(REGISTRY)]
 
 
 def known_facts() -> set[str]:
-    return {fact for gate in all_gates() for fact in gate.facts}
+    return {fact for gate in all_gates() for fact in gate.declared_facts()}
 
 
 def known_gate_ids() -> set[str]:

@@ -1,14 +1,19 @@
-"""G3 — SAST: reguły „nigdy" z `rules/semgrep/` na zmienionych liniach.
+"""G3 — SAST: reguły „nigdy" z zainstalowanych `SemgrepRulePackProvider` na
+zmienionych liniach.
 
-Reguły same są opisane w `rules/semgrep/never.yaml`: wzorce, które nie mają
-poprawnego zastosowania w tym repo, więc trafienie oznacza błąd albo
-świadome obejście zabezpieczenia „żeby przeszło" — a to drugie jest w kodzie
-od agenta częstsze, niż się wydaje (PLAN.md §G3).
+Reguły same są opisane w `rules/semgrep/*.yaml` per pack: wzorce, które nie
+mają poprawnego zastosowania w danym języku, więc trafienie oznacza błąd
+albo świadome obejście zabezpieczenia „żeby przeszło" — a to drugie jest w
+kodzie od agenta częstsze, niż się wydaje (PLAN.md §G3).
 
-Filtrujemy do zmienionych linii z tego samego powodu co w G1.static: bez
-tego pierwszy przebieg na starszym repo tonie w istniejącym długu i zespół
-przestaje czytać raport. Semgrep jest tu obowiązkowy — bez niego cały zestaw
-reguł „nigdy" milczy, więc jego brak jest błędem bramki, nie ostrzeżeniem.
+Ta bramka sama nie ma żadnej logiki językowej — jest agregatorem poziomu 1
+(`core/plugins.py`): enumeruje dostawców zarejestrowanych pod
+`gatekeeper.semgrep_rule_packs`, przekazuje wszystkie ich katalogi reguł
+semgrepowi jednym wywołaniem (semgrep sam scala wiele `--config`) i tak
+zebrany wynik filtruje do zmienionych linii — jak w G1.static, inaczej
+pierwszy przebieg na starszym repo tonie w istniejącym długu. Brak choćby
+jednego zainstalowanego pack'a reguł to `error`, nie cichy brak dowodu —
+semgrep bez `--config` w ogóle się nie uruchamia sensownie.
 """
 
 from __future__ import annotations
@@ -19,8 +24,17 @@ from ..adapters.base import ToolFailed, ToolMissing, only_changed_lines
 from ..adapters.semgrep import run_semgrep
 from ..core.change import ChangeContext
 from ..core.finding import GateResult, Severity
+from ..core.plugins import SemgrepRulePackProvider
 from ..core.runner import Sandbox, SandboxPolicy
 from . import Gate, register
+
+RULE_PACK_GROUP = "gatekeeper.semgrep_rule_packs"
+
+
+def _installed_rule_packs() -> list[SemgrepRulePackProvider]:
+    from importlib.metadata import entry_points
+
+    return [ep.load()() for ep in entry_points(group=RULE_PACK_GROUP)]
 
 
 @register
@@ -32,6 +46,7 @@ class SastGuard(Gate):
         "sast.finding_count",
         "sast.critical_count",
         "sast.rule_ids",
+        "sast.rule_packs",
     )
 
     def run(self, change: ChangeContext) -> GateResult:
@@ -40,7 +55,19 @@ class SastGuard(Gate):
             "sast.finding_count": 0,
             "sast.critical_count": 0,
             "sast.rule_ids": [],
+            "sast.rule_packs": [],
         }
+
+        packs = _installed_rule_packs()
+        facts["sast.rule_packs"] = sorted(p.pack_id for p in packs)
+        if not packs:
+            return self.result(
+                status="error",
+                duration_s=time.monotonic() - started,
+                facts=facts,
+                message="brak zainstalowanego pack'a reguł semgrep "
+                f"(entry points `{RULE_PACK_GROUP}`) — bramka nie ma czego wołać",
+            )
 
         sandbox = Sandbox(
             SandboxPolicy(
@@ -60,6 +87,7 @@ class SastGuard(Gate):
                 change.repo,
                 sandbox,
                 self.id,
+                config=[p.rules_dir() for p in packs],
                 timeout_s=self.budget_s,
                 max_memory_mb=int(self.config.get("max_memory_mb", 2000)),
             )
