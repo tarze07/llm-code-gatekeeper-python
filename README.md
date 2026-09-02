@@ -1,4 +1,4 @@
-# llm-code-gatekeeper
+# llm-code-gatekeeper-python
 
 Pack **Python** dla [`llm-code-gatekeeper-core`](https://github.com/tarze07/llm-code-gatekeeper-core) — silnika bramy jakości dla kodu generowanego przez agentów LLM (Codex, Claude Code, Cursor, Devin…).
 
@@ -9,7 +9,7 @@ Odpowiada na pytanie: **czy ta zmiana może pójść na produkcję?** — decyzj
 System jest podzielony na wspólny rdzeń + cienkie pack'i per język, złożone przez [entry points](https://packaging.python.org/en/latest/specifications/entry-points/), nie przez import wprost:
 
 - **[`llm-code-gatekeeper-core`](https://github.com/tarze07/llm-code-gatekeeper-core)** — silnik: `ChangeContext`, model `Finding`/`GateResult`/`Decision`, polityka, CLI (`gatekeeper`), 10 bramek G0–G3 jako logika dispatchu, manifest+rejestr+typosquat+SCA dla PyPI/npm/NuGet (język-agnostyczne, więc żyją tu, nie w pack'ach).
-- **`llm-code-gatekeeper`** (to repo) — Python: `ruff`+`mypy` (`G1.static`), testy przez `ast` (`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage`), reguły „nigdy" specyficzne dla Pythona (`G3.sast`).
+- **`llm-code-gatekeeper-python`** (to repo) — Python: `ruff`+`mypy` (`G1.static`), testy przez `ast` (`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage`), reguły „nigdy" specyficzne dla Pythona (`G3.sast`).
 - **[`llm-code-gatekeeper-ts`](https://github.com/tarze07/llm-code-gatekeeper-ts)** — TS/JS: `tsc`+`eslint` (`G1.static`), reguły „nigdy" TS/JS.
 - **[`llm-code-gatekeeper-csharp`](https://github.com/tarze07/llm-code-gatekeeper-csharp)** — C#: `dotnet build` (`G1.static`), reguły „nigdy" C#.
 

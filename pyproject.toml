@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-code-gatekeeper"
+name = "llm-code-gatekeeper-python"
 version = "0.2.0"
 description = "Pack Python dla llm-code-gatekeeper-core: ruff/mypy (G1.static), testing/* (G2.*), reguły „nigdy” SAST"
 requires-python = ">=3.12"
