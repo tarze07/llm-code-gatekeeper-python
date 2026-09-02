@@ -43,7 +43,7 @@ Założenie, na którym stoi całość: w pracy z agentem **testy, lockfile, kon
 | `gatekeeper_python/testing/` | `PythonTestToolchain` (`gatekeeper.test_toolchains`): discovery testów przez `ast`, jakość testów, cross-verify (uruchomienie na kodzie sprzed zmiany), coverage różnicowe |
 | `gatekeeper_python/adapters/coverage.py` | `coverage.py` + `diff-cover`, branch-aware — konsumowane przez `PythonTestToolchain.produce_coverage_report()` |
 
-`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage` mają dziś odpowiednik dla Pythona i C# — TS/JS jeszcze nie: brak zarejestrowanego `TestToolchain` to `skipped`, nie błąd; native helper (TS Compiler API) jest zaplanowany jako osobne zlecenie. `G1.complexity` na razie tylko Python — TS/C# w planie, ten sam kontrakt (`skipped` bez zainstalowanego `ComplexityAnalyzer`).
+`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage` mają dziś odpowiednik dla Pythona i C# — TS/JS jeszcze nie: brak zarejestrowanego `TestToolchain` to `skipped`, nie błąd; native helper (TS Compiler API) jest zaplanowany jako osobne zlecenie. `G1.complexity` ma dziś odpowiednik we wszystkich trzech pack'ach (Python przez `ast`, TS/JS przez regułę `complexity` eslinta, C# przez `gatekeeper-cs-helper`).
 
 ## Szybki start
 
