@@ -1,5 +1,8 @@
 # Plan implementacji: narzędzia bramy jakości
 
+> **Uwaga (2026-09):** dokument napisany przed fizycznym podziałem systemu na `llm-code-gatekeeper-core` + pack'i per język (`llm-code-gatekeeper`, `-ts`, `-csharp`) — architektura bramek poniżej wciąż aktualna, tylko rozmieszczenie kodu na repozytoria się zmieniło. Patrz [README.md](README.md#cztery-repozytoria).
+
+
 Dokument towarzyszący [PLAN.md](PLAN.md). PLAN.md mówi *co* sprawdzać. Ten dokument mówi *co zbudować* — narzędzie po narzędziu: interfejs, algorytm, pułapki, test akceptacyjny, koszt.
 
 **Założenia stackowe** (do zmiany, ale reszta dokumentu z nich wynika):

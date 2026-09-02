@@ -1,5 +1,8 @@
 # Plan: brama jakości dla kodu generowanego przez agentów LLM
 
+> **Uwaga (2026-09):** dokument napisany przed fizycznym podziałem systemu na `llm-code-gatekeeper-core` + pack'i per język (`llm-code-gatekeeper`, `-ts`, `-csharp`) — architektura bramek poniżej wciąż aktualna, tylko rozmieszczenie kodu na repozytoria się zmieniło. Patrz [README.md](README.md#cztery-repozytoria).
+
+
 **Cel:** zbudować automatyczny system, który dla zmiany (PR/patch) wyprodukowanej przez agenta LLM (Codex, Claude Code, Cursor, Devin…) odpowiada na pytanie: *czy ten kod może pójść na produkcję?* — z uzasadnieniem, dowodami i jednoznaczną decyzją: `PASS` / `PASS-WITH-REVIEW` / `BLOCK`.
 
 **Nie-cel:** zastąpienie code review przez człowieka. Celem jest przesunięcie uwagi człowieka tam, gdzie faktycznie jest potrzebna, i zablokowanie klas błędów, które maszyna wyłapie taniej i pewniej.

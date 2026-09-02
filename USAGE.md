@@ -1,5 +1,8 @@
 # Jak tego używać
 
+> **Uwaga (2026-09):** dokument napisany przed fizycznym podziałem systemu na `llm-code-gatekeeper-core` + pack'i per język (`llm-code-gatekeeper`, `-ts`, `-csharp`) — architektura bramek poniżej wciąż aktualna, tylko rozmieszczenie kodu na repozytoria się zmieniło. Patrz [README.md](README.md#cztery-repozytoria).
+
+
 Przewodnik dla kogoś, kto ma przed sobą kod wygenerowany przez agenta i pyta: *no dobrze, i co teraz?*
 
 Dokument opisuje wyłącznie to, co **jest zbudowane** — kamienie 1 i 2 z [TOOLS.md](TOOLS.md). Czego brama jeszcze nie sprawdza: na końcu, w sekcji [Uczciwe zastrzeżenie](#uczciwe-zastrzeżenie).
