@@ -38,14 +38,18 @@ def _case(**expect_kwargs) -> Case:
 
 def test_wczytywanie_prawdziwego_pliku_cases_yaml():
     """Python-pack dziedziczy tylko przypadki wymagające tego pack'a
-    zainstalowanego (PythonRulePack, PythonTestToolchain) — gate'y w pełni
-    core-owe i G1.deps/G3.sca (PyPI/npm/NuGet) mają własny zestaw w
-    `llm-code-gatekeeper-core`, patrz komentarz na górze pliku."""
+    zainstalowanego (PythonRulePack, PythonTestToolchain,
+    PythonComplexityAnalyzer) — gate'y w pełni core-owe i G1.deps/G3.sca
+    (PyPI/npm/NuGet) mają własny zestaw w `llm-code-gatekeeper-core`, patrz
+    komentarz na górze pliku."""
     cases = load_cases(Path("calibration/cases.yaml"))
     assert {c.name for c in cases} == {
         "eval-na-wejsciu",
         "test-bez-dowodu",
         "test-bez-asercji",
+        "zlozonosc-powyzej-progu",
+        "zlozonosc-straznik",
+        "zlozonosc-poza-diffem",
         "rozgalezienie-bez-testu",
     }
     eval_case = next(c for c in cases if c.name == "eval-na-wejsciu")

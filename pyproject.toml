@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-code-gatekeeper-python"
-version = "0.2.0"
-description = "Pack Python dla llm-code-gatekeeper-core: ruff/mypy (G1.static), testing/* (G2.*), reguły „nigdy” SAST"
+version = "0.3.0"
+description = "Pack Python dla llm-code-gatekeeper-core: ruff/mypy (G1.static), testing/* (G2.*), reguły „nigdy” SAST, złożoność cyklomatyczna (G1.complexity)"
 requires-python = ">=3.12"
 dependencies = [
     "llm-code-gatekeeper-core>=0.1.0",
@@ -38,6 +38,9 @@ python = "gatekeeper_python.adapters.linters:PythonStaticChecker"
 
 [project.entry-points."gatekeeper.test_toolchains"]
 python = "gatekeeper_python.testing.toolchain:PythonTestToolchain"
+
+[project.entry-points."gatekeeper.complexity_analyzers"]
+python = "gatekeeper_python.adapters.complexity:PythonComplexityAnalyzer"
 
 [tool.setuptools.packages.find]
 include = ["gatekeeper_python*"]

@@ -58,6 +58,18 @@ thresholds:
     max: 0
     message: "Nowo dodana zależność ma znaną podatność (pip-audit)."
 
+  # G1.complexity nie jest w `warn_only` niżej — tania, deterministyczna
+  # bramka o niskim fałszywym alarmie (mierzy tylko metody, których ciało
+  # rusza diff), więc egzekwuje od pierwszego dnia (PLAN-G1-complexity.md §5.3).
+  complexity.max:
+    max: 10
+    message: >-
+      Funkcja w diffie przekracza złożoność cyklomatyczną 10 —
+      rozbij na strażników (Uncle Bob / G1.complexity).
+  complexity.over_threshold_count:
+    max: 0
+    message: "W diffie są funkcje powyżej progu złożoności."
+
 human_review_required_when:
   - paths_match:
       - "**/auth/**"
@@ -88,6 +100,9 @@ warn_only:
 
 # Konfiguracja per bramka.
 gates:
+  G1.complexity:
+    max_method: 10 # próg McCabe; 11+ blokuje (Uncle Bob: 1–10 „prosta")
+    include_tests: false # table-driven testy z wieloma `if` to nie dług produkcyjny
   G1.deps:
     min_age_days: 90
     internal_prefixes: []

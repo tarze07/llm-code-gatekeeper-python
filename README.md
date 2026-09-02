@@ -8,8 +8,8 @@ Odpowiada na pytanie: **czy ta zmiana może pójść na produkcję?** — decyzj
 
 System jest podzielony na wspólny rdzeń + cienkie pack'i per język, złożone przez [entry points](https://packaging.python.org/en/latest/specifications/entry-points/), nie przez import wprost:
 
-- **[`llm-code-gatekeeper-core`](https://github.com/tarze07/llm-code-gatekeeper-core)** — silnik: `ChangeContext`, model `Finding`/`GateResult`/`Decision`, polityka, CLI (`gatekeeper`), 10 bramek G0–G3 jako logika dispatchu, manifest+rejestr+typosquat+SCA dla PyPI/npm/NuGet (język-agnostyczne, więc żyją tu, nie w pack'ach).
-- **`llm-code-gatekeeper-python`** (to repo) — Python: `ruff`+`mypy` (`G1.static`), testy przez `ast` (`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage`), reguły „nigdy" specyficzne dla Pythona (`G3.sast`).
+- **[`llm-code-gatekeeper-core`](https://github.com/tarze07/llm-code-gatekeeper-core)** — silnik: `ChangeContext`, model `Finding`/`GateResult`/`Decision`, polityka, CLI (`gatekeeper`), 11 bramek G0–G3 jako logika dispatchu, manifest+rejestr+typosquat+SCA dla PyPI/npm/NuGet (język-agnostyczne, więc żyją tu, nie w pack'ach).
+- **`llm-code-gatekeeper-python`** (to repo) — Python: `ruff`+`mypy` (`G1.static`), złożoność cyklomatyczna przez `ast` (`G1.complexity`), testy przez `ast` (`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage`), reguły „nigdy" specyficzne dla Pythona (`G3.sast`).
 - **[`llm-code-gatekeeper-ts`](https://github.com/tarze07/llm-code-gatekeeper-ts)** — TS/JS: `tsc`+`eslint` (`G1.static`), reguły „nigdy" TS/JS.
 - **[`llm-code-gatekeeper-csharp`](https://github.com/tarze07/llm-code-gatekeeper-csharp)** — C#: `dotnet build` (`G1.static`), reguły „nigdy" C#.
 
@@ -22,6 +22,7 @@ Instalujesz core + pack(i) dla języków w ocenianym repo — `gatekeeper.gates`
 | Bramka | Zakres | Właściciel |
 |---|---|---|
 | G0 | Provenance, rozmiar i zakres diffa | core |
+| G1.complexity | Złożoność cyklomatyczna (McCabe) zmienionych metod | core (dispatch) + pack per język |
 | G1.deps | Nowe zależności: rejestr, wiek, typosquat — PyPI/npm/NuGet | core |
 | G1.static | Build/lint/typy na zmienionych liniach | core (dispatch) + pack per język |
 | G2 | Testy: weryfikacja krzyżowa, jakość, diff coverage | core (dispatch) + pack per język |
@@ -37,11 +38,12 @@ Założenie, na którym stoi całość: w pracy z agentem **testy, lockfile, kon
 | Element | Co robi |
 |---|---|
 | `gatekeeper_python/adapters/linters.py` | `PythonStaticChecker` — ruff + mypy, rejestrowany pod `gatekeeper.static_checkers` |
+| `gatekeeper_python/adapters/complexity.py` | `PythonComplexityAnalyzer` — złożoność McCabe przez `ast` (bez `radon`), rejestrowany pod `gatekeeper.complexity_analyzers` |
 | `gatekeeper_python/adapters/semgrep.py` | `PythonRulePack` — `rules/semgrep/python.yaml`, rejestrowany pod `gatekeeper.semgrep_rule_packs` |
 | `gatekeeper_python/testing/` | `PythonTestToolchain` (`gatekeeper.test_toolchains`): discovery testów przez `ast`, jakość testów, cross-verify (uruchomienie na kodzie sprzed zmiany), coverage różnicowe |
 | `gatekeeper_python/adapters/coverage.py` | `coverage.py` + `diff-cover`, branch-aware — konsumowane przez `PythonTestToolchain.produce_coverage_report()` |
 
-`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage` nie mają jeszcze odpowiednika dla TS/JS/C# — brak zarejestrowanego `TestToolchain` to `skipped`, nie błąd; native helpery (TS Compiler API, Roslyn) są zaplanowane jako osobne zlecenia.
+`G2.cross_verify`/`G2.test_sanity`/`G2.diff_coverage` mają dziś odpowiednik dla Pythona i C# — TS/JS jeszcze nie: brak zarejestrowanego `TestToolchain` to `skipped`, nie błąd; native helper (TS Compiler API) jest zaplanowany jako osobne zlecenie. `G1.complexity` na razie tylko Python — TS/C# w planie, ten sam kontrakt (`skipped` bez zainstalowanego `ComplexityAnalyzer`).
 
 ## Szybki start
 
