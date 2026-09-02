@@ -1,4 +1,4 @@
-"""Testy adaptera pokrycia różnicowego (`gatekeeper.adapters.coverage`).
+"""Testy adaptera pokrycia różnicowego (`gatekeeper_python.adapters.coverage`).
 
 Próbka `diffcover_report.json` pochodzi z realnego przebiegu: `coverage run
 --branch` + `coverage xml` + `diff-cover ... --branch-coverage
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gatekeeper.adapters.coverage import DiffCoverageResult, parse_diff_cover_json
+from gatekeeper_python.adapters.coverage import DiffCoverageResult, parse_diff_cover_json
 
 REPORT = Path(__file__).parent / "data" / "diffcover_report.json"
 

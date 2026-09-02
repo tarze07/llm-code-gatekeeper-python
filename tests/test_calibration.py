@@ -11,15 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from gatekeeper.calibration import (
+from gatekeeper_core.calibration import (
     Case,
     Expectation,
     _build_case_repo,
     _check,
     load_cases,
 )
-from gatekeeper.core.finding import Decision, GateResult, Reason, RunResult, Verdict
+from gatekeeper_core.core.finding import Decision, GateResult, Reason, RunResult, Verdict
 
 
 def _run(verdict: Verdict, reasons=(), warnings=()) -> RunResult:
@@ -38,22 +37,17 @@ def _case(**expect_kwargs) -> Case:
 
 
 def test_wczytywanie_prawdziwego_pliku_cases_yaml():
+    """Python-pack dziedziczy tylko przypadki wymagające tego pack'a
+    zainstalowanego (PythonRulePack, PythonTestToolchain) — gate'y w pełni
+    core-owe i G1.deps/G3.sca (PyPI/npm/NuGet) mają własny zestaw w
+    `llm-code-gatekeeper-core`, patrz komentarz na górze pliku."""
     cases = load_cases(Path("calibration/cases.yaml"))
     assert {c.name for c in cases} == {
-        "halucynowany-pakiet",
-        "halucynowany-pakiet-npm",
-        "czysty-pr",
         "eval-na-wejsciu",
-        "diff-zbyt-duzy",
-        "sekret-w-diffie",
         "test-bez-dowodu",
         "test-bez-asercji",
         "rozgalezienie-bez-testu",
     }
-    hp = next(c for c in cases if c.name == "halucynowany-pakiet")
-    assert hp.expect.verdict is Verdict.BLOCK
-    assert hp.expect.blocking_rules == ("deps.unknown_package",)
-
     eval_case = next(c for c in cases if c.name == "eval-na-wejsciu")
     assert eval_case.requires_tools == ("semgrep", "gitleaks")
     assert eval_case.expect.warning_rules == ("sast.critical_count",)

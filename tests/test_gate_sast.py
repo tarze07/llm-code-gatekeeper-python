@@ -10,9 +10,8 @@ from __future__ import annotations
 import shutil
 
 import pytest
-
-from gatekeeper.core.change import ChangeContext
-from gatekeeper.gates.g3_sast import SastGuard
+from gatekeeper_core.core.change import ChangeContext
+from gatekeeper_core.gates.g3_sast import SastGuard
 
 pytestmark = pytest.mark.skipif(
     shutil.which("semgrep") is None, reason="semgrep niedostępny — zainstaluj `.[gates]`"

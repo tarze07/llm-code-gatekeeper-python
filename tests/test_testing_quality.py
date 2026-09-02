@@ -1,4 +1,4 @@
-"""Testy linter jakości testów (`gatekeeper.testing.quality`) — gołe AST,
+"""Testy linter jakości testów (`gatekeeper_python.testing.quality`) — gołe AST,
 bez gita i bez pytesta: to jest logika czysto syntaktyczna.
 """
 
@@ -8,7 +8,7 @@ import ast
 
 import pytest
 
-from gatekeeper.testing.quality import check_test, module_helpers_of
+from gatekeeper_python.testing.quality import check_test, module_helpers_of
 
 
 def _test_node(source: str) -> tuple[ast.FunctionDef, dict[str, ast.FunctionDef]]:

@@ -6,8 +6,8 @@ nie na atrapie.
 
 from __future__ import annotations
 
-from gatekeeper.core.change import ChangeContext
-from gatekeeper.gates.g2_test_sanity import TestSanity
+from gatekeeper_core.core.change import ChangeContext
+from gatekeeper_core.gates.g2_test_sanity import TestSanity
 
 APP_CODE = "def dodaj(a, b):\n    return a + b\n"
 

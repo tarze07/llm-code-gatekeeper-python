@@ -6,8 +6,8 @@ pytesta samego w sobie). To jedyny sposób, żeby faktycznie sprawdzić, że
 
 from __future__ import annotations
 
-from gatekeeper.core.change import ChangeContext
-from gatekeeper.gates.g2_diff_coverage import DiffCoverage
+from gatekeeper_core.core.change import ChangeContext
+from gatekeeper_core.gates.g2_diff_coverage import DiffCoverage
 
 APP_WITH_BRANCH = """
 def add(a, b):

@@ -4,13 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-code-gatekeeper"
-version = "0.1.0"
-description = "Brama jakości dla kodu generowanego przez agentów LLM"
+version = "0.2.0"
+description = "Pack Python dla llm-code-gatekeeper-core: ruff/mypy (G1.static), testing/* (G2.*), reguły „nigdy” SAST"
 requires-python = ">=3.12"
 dependencies = [
-    "pyyaml>=6.0",
-    "typer>=0.12",
-    "requests>=2.31",
+    "llm-code-gatekeeper-core>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -18,63 +16,34 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
 ]
-# Binaria, które bramki uruchamiają jako podprocesy (`core.runner.Sandbox`),
+# Binaria, które adaptery uruchamiają jako podprocesy (`core.runner.Sandbox`),
 # nie jako biblioteki Pythona. Brak któregoś z nich nie wywraca instalacji —
-# odpowiednia bramka zgłasza `error` z jasnym komunikatem (TOOLS.md §3, §5).
+# odpowiedni checker/toolchain zgłasza `error` z jasnym komunikatem.
 gates = [
     "ruff>=0.5",
     "mypy>=1.10",
     "types-PyYAML>=6.0",
-    "semgrep>=1.70",
-    "pip-audit>=2.7",
     "coverage>=7.0",
     "diff-cover>=8.0",
 ]
 
-[project.scripts]
-gatekeeper = "gatekeeper.cli:main"
-
-# Bramki rejestrują się przez entry points, nie przez listę importów w
-# `gatekeeper/gates/__init__.py` — ten pakiet rejestruje tu swoje własne
-# dziesięć bramek (dogfooding mechanizmu pluginów, patrz `core/plugins.py`
-# i `gatekeeper/gates/__init__.py::all_gates()`).
-[project.entry-points."gatekeeper.gates"]
-"G0.provenance" = "gatekeeper.gates.g0_provenance:Provenance"
-"G0.scope" = "gatekeeper.gates.g0_scope:ScopeGuard"
-"G1.deps" = "gatekeeper.gates.g1_deps:DepGuard"
-"G1.static" = "gatekeeper.gates.g1_static:StaticGuard"
-"G2.cross_verify" = "gatekeeper.gates.g2_crossverify:CrossVerify"
-"G2.test_sanity" = "gatekeeper.gates.g2_test_sanity:TestSanity"
-"G2.diff_coverage" = "gatekeeper.gates.g2_diff_coverage:DiffCoverage"
-"G3.sast" = "gatekeeper.gates.g3_sast:SastGuard"
-"G3.sca" = "gatekeeper.gates.g3_sca:ScaGuard"
-"G3.secrets" = "gatekeeper.gates.g3_secrets:SecretsGate"
-
-# Reguły semgrep rejestrują się przez tę samą logikę (poziom 2, patrz
-# `core/plugins.py::SemgrepRulePackProvider`) — ten pakiet niesie tylko
-# reguły „nigdy" specyficzne dla Pythona (`rules/semgrep/python.yaml`);
-# ts/csharp mają własne pack'i w swoich repo, reguła uniwersalna żyje w core.
+# Bramki (G0-G3, jako logika dispatchu) i CLI (`gatekeeper`) żyją w
+# `llm-code-gatekeeper-core` — ten pakiet rejestruje wyłącznie dostawców
+# poziomu 2 (patrz `core/plugins.py` w core-repo).
 [project.entry-points."gatekeeper.semgrep_rule_packs"]
-python = "gatekeeper.adapters.semgrep:PythonRulePack"
+python = "gatekeeper_python.adapters.semgrep:PythonRulePack"
 
 [project.entry-points."gatekeeper.static_checkers"]
-python = "gatekeeper.adapters.linters:PythonStaticChecker"
-ts_js = "gatekeeper.adapters.linters:TsJsStaticChecker"
-csharp = "gatekeeper.adapters.dotnet:CsharpStaticChecker"
-
-[project.entry-points."gatekeeper.dep_ecosystems"]
-pypi = "gatekeeper.deps.ecosystems:PyPIEcosystem"
-npm = "gatekeeper.deps.ecosystems:NpmEcosystem"
-nuget = "gatekeeper.deps.ecosystems:NuGetEcosystem"
+python = "gatekeeper_python.adapters.linters:PythonStaticChecker"
 
 [project.entry-points."gatekeeper.test_toolchains"]
-python = "gatekeeper.testing.toolchain:PythonTestToolchain"
+python = "gatekeeper_python.testing.toolchain:PythonTestToolchain"
 
 [tool.setuptools.packages.find]
-include = ["gatekeeper*"]
+include = ["gatekeeper_python*"]
 
 [tool.setuptools.package-data]
-gatekeeper = ["data/*.txt"]
+gatekeeper_python = ["rules/semgrep/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -86,10 +55,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-
-[tool.ruff.lint.per-file-ignores]
-# typer buduje interfejs CLI z wartości domyślnych — B008 nie ma tu zastosowania
-"gatekeeper/cli.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"

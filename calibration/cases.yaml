@@ -1,96 +1,36 @@
-# Zestaw kalibracyjny (PLAN.md §6 „Faza 0"; TOOLS.md, kamień 3).
+# Zestaw kalibracyjny python-packu: przypadki, które wymagają tego pack'a
+# zainstalowanego (PythonRulePack dla G3.sast, PythonTestToolchain dla G2.*).
+# Gate'y w pełni core-owe (G0, G3.secrets) i G1.deps/G3.sca (PyPI/npm/NuGet)
+# mają własny zestaw w `llm-code-gatekeeper-core` — nie duplikowane tutaj.
 #
-# Każdy przypadek to para katalogów w `calibration/fixtures/<fixture>/`:
-# `base/` (stan przed zmianą) i `head/` (stan po zmianie). Harness buduje
-# z nich tymczasowe repo gita, commituje oba stany i uruchamia `run_gates`
-# tak samo, jak zrobiłoby to CI na prawdziwym PR-ze.
-#
-# To jest zalążek — docelowo dochodzą tu prawdziwe historyczne PR-y
-# (30–50 sztuk, PLAN.md §6), nie tylko syntetyczne przykłady poniżej.
-# Żeby dodać PR-a: skopiuj drzewo repo sprzed i po zmianie do dwóch
-# katalogów, nazwij fixture i dopisz przypadek — nie trzeba pisać Pythona.
-#
-# Uruchomienie: `gatekeeper calibrate`
+# Uruchomienie: `gatekeeper calibrate` (wymaga zainstalowanego
+# `llm-code-gatekeeper-core`)
 
 cases:
-  - name: halucynowany-pakiet
-    description: >-
-      Agent dodaje zależność, której nie ma w PyPI — najkosztowniejsza
-      klasa defektu z PLAN.md §1. Musi blokować.
-    fixture: halucynowany-pakiet
-    expect:
-      verdict: BLOCK
-      blocking_rules: [deps.unknown_package]
-
-  - name: halucynowany-pakiet-npm
-    description: >-
-      Ten sam defekt co `halucynowany-pakiet`, ale w ekosystemie npm —
-      dowód, że dep-guard nie jest zawężony do PyPI (kamień 3, pełny
-      parytet G0-G3 dla TS/JS). Musi blokować.
-    fixture: halucynowany-pakiet-npm
-    expect:
-      verdict: BLOCK
-      blocking_rules: [deps.unknown_package]
-
-  - name: czysty-pr
-    description: >-
-      Mały, poprawny PR bez żadnych defektów. Zero fałszywych alarmów —
-      to jest test na to, czy brama w ogóle nadaje się do codziennej pracy.
-      Wymaga gitleaksa: bez niego G3.secrets zgłasza `error` (brak narzędzia
-      to brak dowodu, nie zielona brama) i werdykt uczciwie spada do
-      PASS-WITH-REVIEW — to nie jest fałszywy alarm tego przypadku, tylko
-      niekompletne środowisko, w którym go uruchomiono.
-    fixture: czysty-pr
-    requires_tools: [gitleaks]
-    expect:
-      verdict: PASS
-
   - name: eval-na-wejsciu
     description: >-
       Nowy kod wykonuje `eval()` na danych z requestu — reguła „nigdy”
-      `no-eval-on-input` (G3.sast) musi to złapać. G3.sast jest na razie
-      w `warn_only` (kamień 3, świeża bramka), więc oczekiwany werdykt to
-      PASS z ostrzeżeniem, nie BLOCK — ten przypadek dokumentuje bieżący
-      stan i ma zacząć failować w dniu, w którym ktoś zdejmie `warn_only`
-      bez sprawdzenia, czy reguła rzeczywiście działa.
+      `no-eval-on-input` (G3.sast, PythonRulePack) musi to złapać. G3.sast
+      jest na razie w `warn_only` (kamień 3, świeża bramka), więc oczekiwany
+      werdykt to PASS z ostrzeżeniem, nie BLOCK — ten przypadek dokumentuje
+      bieżący stan i ma zacząć failować w dniu, w którym ktoś zdejmie
+      `warn_only` bez sprawdzenia, czy reguła rzeczywiście działa.
     fixture: eval-na-wejsciu
-    requires_tools: [semgrep, gitleaks] # gitleaks: patrz komentarz w `czysty-pr`
+    requires_tools: [semgrep, gitleaks] # gitleaks: patrz komentarz w core/czysty-pr
     expect:
       verdict: PASS
       warning_rules: [sast.critical_count]
 
-  - name: diff-zbyt-duzy
-    description: >-
-      500-liniowy plik w jednym PR-ze — najskuteczniejsza pojedyncza reguła
-      w systemie (TOOLS.md §2.2). Musi blokować niezależnie od treści zmiany.
-    fixture: diff-zbyt-duzy
-    expect:
-      verdict: BLOCK
-      blocking_rules: [diff.effective_lines]
-
-  - name: sekret-w-diffie
-    description: >-
-      Agent zostawia klucz AWS w diffie (syntetyczny klucz w poprawnym
-      formacie, nie prawdziwy sekret — kanoniczny przykład z dokumentacji
-      AWS, `AKIAIOSFODNN7EXAMPLE`, jest celowo na globalnej allowliście
-      gitleaksa i nie nadaje się do tego fixture'u). G3.secrets nie jest
-      w `warn_only`, więc musi blokować naprawdę, nie tylko ostrzegać.
-    fixture: sekret-w-diffie
-    requires_tools: [gitleaks]
-    expect:
-      verdict: BLOCK
-      blocking_rules: [secrets.found_in_diff]
-
   - name: test-bez-dowodu
     description: >-
       Nowy test asertuje zachowanie, które w tym PR-ze się nie zmieniło —
-      klasyczny „test, który niczego nie dowodzi" (PLAN.md §1, TOOLS.md
+      klasyczny „test, który niczego nie dowodzi” (PLAN.md §1, TOOLS.md
       §4.1). Musi przejść na kodzie sprzed zmiany, czyli wyzwolić
-      `tests.pass_on_pre_change_code`. G2.cross_verify jest na razie
-      w `warn_only` (kamień 3, świeża bramka), więc oczekiwany werdykt to
-      PASS z ostrzeżeniem, nie BLOCK — analogicznie do `eval-na-wejsciu`.
-      Ma zacząć failować w dniu, w którym ktoś zdejmie `warn_only` bez
-      sprawdzenia, czy reguła rzeczywiście działa.
+      `tests.pass_on_pre_change_code` (G2.cross_verify, PythonTestToolchain).
+      G2.cross_verify jest na razie w `warn_only` (kamień 3, świeża bramka),
+      więc oczekiwany werdykt to PASS z ostrzeżeniem, nie BLOCK — analogicznie
+      do `eval-na-wejsciu`. Ma zacząć failować w dniu, w którym ktoś zdejmie
+      `warn_only` bez sprawdzenia, czy reguła rzeczywiście działa.
     fixture: test-bez-dowodu
     expect:
       verdict: PASS
@@ -99,11 +39,11 @@ cases:
   - name: test-bez-asercji
     description: >-
       Nowy test to `assert True` — nie sprawdza niczego, niezależnie od
-      testowanego kodu (TOOLS.md §4.2, G2.test_sanity). G2.test_sanity jest
-      w `warn_only` (kamień 4, świeża bramka), więc oczekiwany werdykt to
-      PASS z ostrzeżeniem `sanity.blocking_count`, nie BLOCK — ten fixture
-      ma zacząć failować w dniu, w którym ktoś zdejmie `warn_only` bez
-      sprawdzenia, czy reguła rzeczywiście działa.
+      testowanego kodu (TOOLS.md §4.2, G2.test_sanity, PythonTestToolchain).
+      G2.test_sanity jest w `warn_only` (kamień 4, świeża bramka), więc
+      oczekiwany werdykt to PASS z ostrzeżeniem `sanity.blocking_count`, nie
+      BLOCK — ten fixture ma zacząć failować w dniu, w którym ktoś zdejmie
+      `warn_only` bez sprawdzenia, czy reguła rzeczywiście działa.
     fixture: test-bez-asercji
     expect:
       verdict: PASS
@@ -113,11 +53,12 @@ cases:
     description: >-
       Nowa funkcja z `if`/`else`, test pokrywa tylko jedną gałąź —
       `--branch-coverage` w `diff-cover` ma to złapać jako niepokryte, mimo
-      że linia `if` sama w sobie się wykonuje (G2.diff_coverage, TOOLS.md
-      §4.5). G2.diff_coverage jest w `warn_only` (kamień 4, świeża bramka),
-      więc oczekiwany werdykt to PASS z ostrzeżeniem `coverage.diff_ratio`,
-      nie BLOCK — ten fixture ma zacząć failować w dniu, w którym ktoś
-      zdejmie `warn_only` bez sprawdzenia, czy reguła rzeczywiście działa.
+      że linia `if` sama w sobie się wykonuje (G2.diff_coverage,
+      PythonTestToolchain, TOOLS.md §4.5). G2.diff_coverage jest w
+      `warn_only` (kamień 4, świeża bramka), więc oczekiwany werdykt to PASS
+      z ostrzeżeniem `coverage.diff_ratio`, nie BLOCK — ten fixture ma
+      zacząć failować w dniu, w którym ktoś zdejmie `warn_only` bez
+      sprawdzenia, czy reguła rzeczywiście działa.
     fixture: rozgalezienie-bez-testu
     requires_tools: [diff-cover]
     expect:

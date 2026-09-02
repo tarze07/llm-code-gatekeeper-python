@@ -5,8 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-
-from gatekeeper.deps.registries import PackageInfo
+from gatekeeper_core.deps.registries import PackageInfo
 
 
 class Repo:

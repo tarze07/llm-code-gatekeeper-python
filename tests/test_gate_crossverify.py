@@ -8,11 +8,11 @@ sprawdzałby wyłącznie własne wyobrażenie o tym, jak zachowuje się pytest.
 from __future__ import annotations
 
 import pytest
+from gatekeeper_core.core.change import ChangeContext
+from gatekeeper_core.core.runner import network_isolation_available
+from gatekeeper_core.gates.g2_crossverify import CrossVerify
 
-from gatekeeper.core.change import ChangeContext
-from gatekeeper.core.runner import network_isolation_available
-from gatekeeper.gates.g2_crossverify import CrossVerify
-from gatekeeper.testing.toolchain import PythonTestToolchain
+from gatekeeper_python.testing.toolchain import PythonTestToolchain
 
 BASE_CODE = """
 def cena(x):

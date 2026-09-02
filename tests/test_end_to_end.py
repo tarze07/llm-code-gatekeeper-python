@@ -9,16 +9,17 @@ from __future__ import annotations
 
 import json
 
-from gatekeeper.core.change import ChangeContext
-from gatekeeper.core.finding import Verdict
-from gatekeeper.core.policy import Policy
-from gatekeeper.core.report import MARKER, render_check_runs, render_json, render_markdown
-from gatekeeper.core.sequence import run_gates
-from gatekeeper.core.store import Store
-from gatekeeper.deps.manifests import PYPI
-from gatekeeper.gates.g0_scope import ScopeGuard
-from gatekeeper.gates.g1_deps import DepGuard
-from gatekeeper.gates.g2_crossverify import CrossVerify
+from gatekeeper_core.core.change import ChangeContext
+from gatekeeper_core.core.finding import Verdict
+from gatekeeper_core.core.policy import Policy
+from gatekeeper_core.core.report import MARKER, render_check_runs, render_json, render_markdown
+from gatekeeper_core.core.sequence import run_gates
+from gatekeeper_core.core.store import Store
+from gatekeeper_core.deps.manifests import PYPI
+from gatekeeper_core.gates.g0_scope import ScopeGuard
+from gatekeeper_core.gates.g1_deps import DepGuard
+from gatekeeper_core.gates.g2_crossverify import CrossVerify
+
 from tests.conftest import FakeRegistry
 
 POLICY_PATH = "policy/gates.yaml"
@@ -41,7 +42,7 @@ def policy() -> Policy:
 
 
 def test_polityka_w_repo_jest_poprawna():
-    from gatekeeper.gates import known_facts, known_gate_ids
+    from gatekeeper_core.gates import known_facts, known_gate_ids
 
     assert policy().lint(known_facts(), known_gate_ids()) == []
 

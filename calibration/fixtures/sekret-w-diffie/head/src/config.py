@@ -1,2 +1,0 @@
-DATABASE_URL = "postgres://localhost:5432/app"
-AWS_KEY = "AKIAFAKEKEY123456789"

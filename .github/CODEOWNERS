@@ -9,4 +9,4 @@
 /rules/               @wlasciciel-bramy
 /.github/workflows/   @wlasciciel-bramy
 /.github/CODEOWNERS   @wlasciciel-bramy
-/gatekeeper/          @wlasciciel-bramy
+/gatekeeper_python/   @wlasciciel-bramy

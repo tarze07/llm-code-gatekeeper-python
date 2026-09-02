@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from gatekeeper.testing import discovery
-from gatekeeper.testing.pytest_runner import build_env, parse_junit, scrub_environment
+from gatekeeper_python.testing import discovery
+from gatekeeper_python.testing.pytest_runner import build_env, parse_junit, scrub_environment
 
 BASE = '''
 def test_stary():
