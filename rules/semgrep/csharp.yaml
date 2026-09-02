@@ -1,0 +1,80 @@
+# Reguły „nigdy" dla C# — wydzielone z dawnego wspólnego `never.yaml` przy
+# podziale na pack'i językowe: ten plik żyje w `llm-code-gatekeeper-csharp`
+# (csharp-pack), rejestrowany jako `SemgrepRulePackProvider` (`pack_id="csharp"`).
+#
+# Każda reguła MUSI mieć test pozytywny i negatywny w rules/semgrep/tests/.
+# Uruchomienie testów: semgrep --test --config rules/semgrep rules/semgrep/tests
+
+rules:
+  - id: no-tls-verify-disabled-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Wyłączona weryfikacja certyfikatu TLS.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      failure_scenario: >-
+        Callback zawsze zwraca `true` niezależnie od błędów łańcucha certyfikatów,
+        więc połączenie przyjmie dowolny certyfikat — atak man-in-the-middle jest
+        niewidoczny dla aplikacji aż do wycieku albo podmiany danych.
+    patterns:
+      - pattern-either:
+          - pattern: $SPM.ServerCertificateValidationCallback = (...) => true;
+          - pattern: $HANDLER.ServerCertificateCustomValidationCallback = (...) => true;
+
+  - id: no-sql-string-concat-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Zapytanie SQL budowane przez sklejanie stringów.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      failure_scenario: >-
+        Wartość z wejścia staje się częścią składni zapytania, więc dane w rodzaju
+        `1; DROP TABLE Users; --` zmienią jego znaczenie. Użyj sparametryzowanego
+        zapytania (`cmd.Parameters.AddWithValue(...)`).
+    patterns:
+      - pattern-either:
+          - pattern: new SqlCommand($X + $Y, ...)
+          - pattern: new SqlCommand($"...{$X}...", ...)
+
+  - id: no-shell-true-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Uruchomienie procesu z interpolowanymi argumentami powłoki.
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      failure_scenario: >-
+        Argumenty budowane przez interpolację/konkatenację trafiają do procesu
+        powłoki, więc wartość `plik.txt & del /f *` w danych wejściowych uruchomi
+        dodatkowe polecenie. Użyj `ProcessStartInfo.ArgumentList` (lista, nie string).
+    patterns:
+      - pattern-either:
+          - pattern: Process.Start($"...{$X}...")
+          - pattern: |
+              new ProcessStartInfo(...) { Arguments = $"...{$X}...", ... }
+
+  - id: no-unsafe-deserialization-cs
+    languages: [csharp]
+    severity: ERROR
+    message: Deserializacja niezaufanych danych.
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      failure_scenario: >-
+        `BinaryFormatter` i pokrewne formatery (.NET oficjalnie odradza ich użycie)
+        wykonują kod zapisany w strumieniu podczas jego wczytywania — plik z sieci
+        albo z cache staje się wtedy wykonywalnym programem. Użyj `System.Text.Json`
+        albo `DataContractSerializer` z listą dozwolonych typów.
+    patterns:
+      - pattern-either:
+          - pattern: new BinaryFormatter(...).Deserialize(...)
+          - pattern: new NetDataContractSerializer(...).Deserialize(...)
+          - pattern: new LosFormatter(...).Deserialize(...)
+          - pattern: new ObjectStateFormatter(...).Deserialize(...)
+          - pattern: new SoapFormatter(...).Deserialize(...)
+          - pattern: |
+              BinaryFormatter $F = ...;
+              ...
+              $F.Deserialize(...)
+          - pattern: |
+              var $F = new BinaryFormatter(...);
+              ...
+              $F.Deserialize(...)

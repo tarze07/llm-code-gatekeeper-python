@@ -17,11 +17,11 @@ from .base import relative_to_repo, run_tool
 
 SEMGREP = "semgrep"
 #: Ważne tylko dopóki `gatekeeper` jest monolitem: po fizycznym rozbiciu na
-#: pack'i per język ta stała znika — każdy pack niesie własny
-#: `rules/semgrep/never.yaml` jako `package-data`, odkrywany przez
-#: `importlib.resources`, nie przez wspinanie się po `__file__.parent`
-#: (dzisiejszy sposób nie przeżyłby instalacji z wheela).
-RULES_DIR = Path(__file__).resolve().parent.parent.parent / "rules" / "semgrep"
+#: pack'i per język ta stała wskazuje na `package-data` tego pack'a
+#: (`rules/semgrep/python.yaml`), odkrywane przez `importlib.resources`, nie
+#: przez wspinanie się po `__file__.parent` (dzisiejszy sposób nie przeżyłby
+#: instalacji z wheela).
+RULES_DIR = Path(__file__).resolve().parent.parent.parent / "rules" / "semgrep" / "python.yaml"
 
 SEVERITY = {
     "ERROR": Severity.CRITICAL,
@@ -30,13 +30,14 @@ SEVERITY = {
 }
 
 
-class MonolithRulePack:
-    """Jedyny dziś zarejestrowany `SemgrepRulePackProvider` (patrz
-    `core/plugins.py`) — niesie CAŁY `rules/semgrep/` jednym plikiem, bo
-    repo jeszcze nie jest rozbite na pack'i per język. Gdy to nastąpi, każdy
-    pack rejestruje własny provider zamiast tego."""
+class PythonRulePack:
+    """`SemgrepRulePackProvider` (patrz `core/plugins.py`) tego pack'a — reguły
+    „nigdy" specyficzne dla Pythona. `ts`/`csharp`-pack rejestrują analogiczne
+    providery ze swoim własnym `rules/semgrep/{ts,csharp}.yaml`; reguła
+    uniwersalna (`no-wildcard-iam-policy`, json/yaml) żyje w core
+    (`SemgrepRulePackProvider` `pack_id="core"`), nie tutaj."""
 
-    pack_id = "monolith"
+    pack_id = "python"
 
     def rules_dir(self) -> Path:
         return RULES_DIR

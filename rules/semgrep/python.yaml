@@ -1,0 +1,121 @@
+# Reguły „nigdy" dla Pythona — wzorce, które nie mają poprawnego zastosowania
+# w kodzie tego stosu. Wydzielone z dawnego wspólnego `never.yaml` przy
+# podziale na pack'i językowe: ten plik żyje w `llm-code-gatekeeper`
+# (python-pack), rejestrowany jako `SemgrepRulePackProvider` (`pack_id="python"`).
+#
+# Trafienie oznacza albo błąd, albo świadome obejście zabezpieczenia „żeby
+# przeszło". W kodzie od agenta to drugie zdarza się częściej, niż się wydaje:
+# model zderza się z błędem TLS albo z niedziałającym parsowaniem i wybiera
+# drogę, która działa, zamiast tej, która jest bezpieczna (PLAN.md §G3).
+#
+# Każda reguła MUSI mieć test pozytywny i negatywny w rules/semgrep/tests/.
+# Reguła bez testu negatywnego prędzej czy później zaczyna blokować poprawny
+# kod, a wtedy zespół przestaje ufać całej bramie.
+#
+# Uruchomienie testów: semgrep --test --config rules/semgrep rules/semgrep/tests
+
+rules:
+  - id: no-tls-verify-disabled
+    languages: [python]
+    severity: ERROR
+    message: Wyłączona weryfikacja certyfikatu TLS.
+    metadata:
+      cwe: "CWE-295: Improper Certificate Validation"
+      failure_scenario: >-
+        Połączenie przyjmie dowolny certyfikat, więc każdy, kto potrafi wpiąć się
+        w ruch (sieć firmowa, publiczne wifi, przejęty DNS), odczyta i podmieni
+        przesyłane dane. Awaria jest niewidoczna: kod działa i zwraca poprawne
+        odpowiedzi aż do momentu ataku.
+    patterns:
+      - pattern-either:
+          - pattern: requests.$METHOD(..., verify=False, ...)
+          - pattern: $SESSION.request(..., verify=False, ...)
+          - pattern: httpx.$METHOD(..., verify=False, ...)
+          - pattern: ssl._create_unverified_context(...)
+          - pattern: |
+              $CTX.verify_mode = ssl.CERT_NONE
+
+  - id: no-eval-on-input
+    languages: [python]
+    severity: ERROR
+    message: Dynamiczne wykonanie kodu na danych z zewnątrz.
+    metadata:
+      cwe: "CWE-95: Eval Injection"
+      failure_scenario: >-
+        Wejście sterujące trafia do interpretera, więc wartość taka jak
+        `__import__("os").system("...")` wykona dowolne polecenie z uprawnieniami
+        procesu. Nie jest to podatność teoretyczna: wystarczy jedno pole formularza.
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+      - pattern-not: eval("...")
+      - pattern-not: exec("...")
+
+  - id: no-sql-string-concat
+    languages: [python]
+    severity: ERROR
+    message: Zapytanie SQL budowane przez sklejanie stringów.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      failure_scenario: >-
+        Wartość z wejścia staje się częścią składni zapytania, więc dane w rodzaju
+        `1 OR 1=1 --` zmienią jego znaczenie: odczytają cudze rekordy albo skasują
+        tabelę. Użyj parametrów zapytania (`execute(sql, (wartosc,))`).
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute("..." % ...)
+          - pattern: $CURSOR.execute("..." + $X)
+          - pattern: $CURSOR.execute(f"...{$X}...")
+          - pattern: $CURSOR.executemany(f"...{$X}...")
+
+  - id: no-shell-true
+    languages: [python]
+    severity: ERROR
+    message: Uruchomienie polecenia powłoki z interpolacją danych.
+    metadata:
+      cwe: "CWE-78: OS Command Injection"
+      failure_scenario: >-
+        Powłoka zinterpretuje znaki `;`, `|` i `$(...)` w danych, więc wartość
+        `plik.txt; rm -rf /` uruchomi drugie polecenie. Przekaż argumenty listą
+        i bez `shell=True`.
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FN(f"...{$X}...", ..., shell=True, ...)
+          - pattern: subprocess.$FN("..." % ..., ..., shell=True, ...)
+          - pattern: subprocess.$FN("..." + $X, ..., shell=True, ...)
+          - pattern: os.system(f"...{$X}...")
+          - pattern: os.system("..." + $X)
+
+  - id: no-unsafe-deserialization
+    languages: [python]
+    severity: ERROR
+    message: Deserializacja niezaufanych danych.
+    metadata:
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      failure_scenario: >-
+        `pickle` i `yaml.load` bez bezpiecznego loadera wykonują kod zapisany
+        w danych podczas ich wczytywania. Plik z sieci albo z cache staje się
+        wtedy wykonywalnym programem. Użyj `json` albo `yaml.safe_load`.
+    patterns:
+      - pattern-either:
+          - pattern: pickle.load(...)
+          - pattern: pickle.loads(...)
+          - pattern: yaml.load($X)
+          - pattern: yaml.load($X, Loader=yaml.Loader)
+          - pattern: yaml.load($X, Loader=yaml.UnsafeLoader)
+
+  - id: no-hardcoded-bind-all-interfaces
+    languages: [python]
+    severity: WARNING
+    message: Usługa nasłuchuje na wszystkich interfejsach.
+    metadata:
+      cwe: "CWE-1327: Binding to an Unrestricted IP Address"
+      failure_scenario: >-
+        Proces przyjmie połączenia spoza maszyny, więc usługa pomyślana jako
+        lokalna stanie się dostępna z sieci — łącznie z panelami debugowania,
+        które zwykle nie mają autoryzacji.
+    patterns:
+      - pattern-either:
+          - pattern: $APP.run(..., host="0.0.0.0", ...)
+          - pattern: $SOCK.bind(("0.0.0.0", ...))

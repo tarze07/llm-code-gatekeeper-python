@@ -51,11 +51,11 @@ gatekeeper = "gatekeeper.cli:main"
 "G3.secrets" = "gatekeeper.gates.g3_secrets:SecretsGate"
 
 # Reguły semgrep rejestrują się przez tę samą logikę (poziom 2, patrz
-# `core/plugins.py::SemgrepRulePackProvider`) — ten pakiet niesie dziś
-# całość `rules/semgrep/` jako jeden pack (podział per-język dopiero przy
-# fizycznym rozbiciu na repo).
+# `core/plugins.py::SemgrepRulePackProvider`) — ten pakiet niesie tylko
+# reguły „nigdy" specyficzne dla Pythona (`rules/semgrep/python.yaml`);
+# ts/csharp mają własne pack'i w swoich repo, reguła uniwersalna żyje w core.
 [project.entry-points."gatekeeper.semgrep_rule_packs"]
-"monolith" = "gatekeeper.adapters.semgrep:MonolithRulePack"
+python = "gatekeeper.adapters.semgrep:PythonRulePack"
 
 [project.entry-points."gatekeeper.static_checkers"]
 python = "gatekeeper.adapters.linters:PythonStaticChecker"
