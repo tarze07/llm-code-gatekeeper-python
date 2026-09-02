@@ -1,5 +1,6 @@
-"""Adapter pokrycia różnicowego: `coverage.py` (uruchomienie) + `diff-cover` (branch-aware
-przecięcie z diffem).
+"""Adapter pokrycia różnicowego: `coverage.py` (uruchomienie testów pod pokryciem,
+eksport Cobertury) — wywołanie `diff-cover` i parsowanie jego wyniku jest już
+wspólne dla wszystkich toolchainów, patrz `gatekeeper_core.core.diffcover`.
 
 TOOLS.md §4.5 stawia zasadę wprost: to, co już jest dojrzałym narzędziem OSS, jest
 adapterem, nie własną logiką. Rozróżnienie „linia wykonana" od „gałąź w pełni pokryta"
@@ -20,47 +21,27 @@ bramka.
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from gatekeeper_core.adapters.base import ToolFailed, run_tool
+from gatekeeper_core.core.diffcover import (
+    DiffCoverageResult,
+    FileCoverage,
+    parse_diff_cover_json,
+    run_diff_cover_on_report,
+)
 from gatekeeper_core.core.runner import Sandbox
 
+__all__ = [
+    "DiffCoverageResult",
+    "FileCoverage",
+    "parse_diff_cover_json",
+    "run_diff_coverage",
+]
+
 COVERAGE_DATA_FILE = ".gatekeeper-coverage"
-
-
-@dataclass(frozen=True)
-class FileCoverage:
-    covered: int
-    total: int
-
-    @property
-    def ratio(self) -> float | None:
-        return self.covered / self.total if self.total else None
-
-
-@dataclass(frozen=True)
-class DiffCoverageResult:
-    #: Wszystkie pliki z diffa, które `diff-cover` zmierzył — **łącznie z testami**.
-    #: Filtrowanie do kodu produkcyjnego to sprawa wywołującego (potrzebuje
-    #: `ChangeContext.is_test_file`, którego adapter celowo nie zna).
-    files: dict[str, FileCoverage] = field(default_factory=dict)
-    raw: dict[str, Any] = field(default_factory=dict)
-
-
-def parse_diff_cover_json(payload: str) -> DiffCoverageResult:
-    """Czysta funkcja parsująca — testowana na zapisanej próbce (`tests/data/`)."""
-    data = json.loads(payload) if payload.strip() else {}
-    files: dict[str, FileCoverage] = {}
-    for path, stats in (data.get("src_stats") or {}).items():
-        covered = len(stats.get("covered_lines") or [])
-        violations = len(stats.get("violation_lines") or [])
-        files[path] = FileCoverage(covered=covered, total=covered + violations)
-    return DiffCoverageResult(files=files, raw=data)
 
 
 def run_diff_coverage(
@@ -71,8 +52,8 @@ def run_diff_coverage(
     env: dict[str, str],
     pytest_args: list[str] | None = None,
 ) -> DiffCoverageResult:
-    """Uruchamia cały zestaw testów repo pod `coverage run --branch`, a wynik
-    przecina z diffem przez `diff-cover`.
+    """Uruchamia cały zestaw testów repo pod `coverage run --branch`, eksportuje
+    Cobertorę i przekazuje ją do `core.diffcover.run_diff_cover_on_report`.
 
     Celowo **cały** zestaw testów, nie tylko nowe/zmienione (`testing.pytest_runner`
     robi to dla `G2.cross_verify`) — pytanie tu brzmi „czy diff pokrywa *jakikolwiek*
@@ -82,7 +63,6 @@ def run_diff_coverage(
         tmp_path = Path(tmp)
         data_file = tmp_path / COVERAGE_DATA_FILE
         xml_report = tmp_path / "coverage.xml"
-        json_report = tmp_path / "diffcover.json"
 
         run_tool(
             [
@@ -130,26 +110,4 @@ def run_diff_coverage(
         if not xml_report.exists():
             raise ToolFailed("`coverage xml` nie wyprodukował raportu")
 
-        try:
-            run_tool(
-                [
-                    "diff-cover",
-                    str(xml_report),
-                    f"--compare-branch={base_sha}",
-                    "--branch-coverage",
-                    "--total-percent-float",
-                    f"--format=json:{json_report}",
-                    "--quiet",
-                ],
-                repo,
-                sandbox,
-                timeout_s,
-            )
-        except ToolFailed:
-            # zwykle „brak zmian w diffie" albo problem z zakresem porównania —
-            # to fakt o tym PR-ze, nie awaria narzędzia
-            return DiffCoverageResult()
-
-        if not json_report.exists():
-            return DiffCoverageResult()
-        return parse_diff_cover_json(json_report.read_text(encoding="utf-8"))
+        return run_diff_cover_on_report(repo, sandbox, [xml_report], base_sha, timeout_s)
