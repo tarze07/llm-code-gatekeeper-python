@@ -1,15 +1,17 @@
 """Konkretne `EcosystemProvider` (`core/plugins.py`) — PyPI, npm, NuGet.
 
-Ważne tylko dopóki `gatekeeper` jest monolitem: te trzy klasy to dokładnie
-to, co przy fizycznym rozbiciu na pack'i per język wędruje 1:1 do
-`gatekeeper_python/deps/provider.py`, `gatekeeper_ts/deps/provider.py`,
-`gatekeeper_csharp/deps/provider.py` — plik jest już podzielony wewnętrznie
-tak, żeby to przeniesienie było czystym cięciem, nie refaktorem.
+Żyje w core, nie w pack'ach per język: `G1.deps`/`G3.sca` są bramkami-agregatorami
+core-owymi (patrz `gates/g1_deps.py`, `gates/g3_sca.py`), a manifest+rejestr+
++typosquat+SCA każdego ekosystemu (`deps.manifests`, `deps.registries`,
+`deps.typosquat`, `adapters.sca`, `adapters.dotnet_projects`) to infrastruktura
+tych bramek, analogicznie do `adapters/base.py` czy `adapters/gitleaks.py`.
+Pack językowy (python/ts/csharp) niczego tu nie rejestruje własnego — po
+prostu instaluje core, które już samo zna PyPI/npm/NuGet przez entry points
+`gatekeeper.dep_ecosystems`.
 
 Same klasy niczego nowego nie liczą — są cienką warstwą nad już istniejącymi,
-sprawdzonymi funkcjami (`deps.manifests`, `deps.registries`, `deps.typosquat`,
-`adapters.sca`, `adapters.dotnet`). Jedyna nowa logika to `scan_sca()`:
-przeniesienie 1:1 dawnych `g3_sca.py::ScaGuard._check_pypi/_check_npm/_check_nuget`.
+sprawdzonymi funkcjami. Jedyna nowa logika to `scan_sca()`: przeniesienie 1:1
+dawnych `g3_sca.py::ScaGuard._check_pypi/_check_npm/_check_nuget`.
 """
 
 from __future__ import annotations
@@ -162,7 +164,7 @@ class NuGetEcosystem:
         timeout_s: float,
         keep_env: tuple[str, ...],
     ) -> EcosystemScaResult:
-        from ..adapters import dotnet as dotnet_adapter
+        from ..adapters import dotnet_projects as dotnet_adapter
 
         # CoreCLR rezerwuje kilka GB przestrzeni adresowej na starcie
         # niezależnie od realnego zużycia (jak semgrep, gates/g3_sast.py) —

@@ -6,7 +6,7 @@ pip-audit ma osobne testy na zapisanej próbce (`test_adapters_sca.py`).
 
 from __future__ import annotations
 
-from gatekeeper.adapters import dotnet, sca
+from gatekeeper.adapters import dotnet_projects, sca
 from gatekeeper.core.change import ChangeContext
 from gatekeeper.core.finding import Finding, Severity
 from gatekeeper.gates.g3_sca import ScaGuard
@@ -152,7 +152,9 @@ def test_nowa_zaleznosc_nuget_z_podatnoscia_blokuje(repo, monkeypatch):
             )
         ]
 
-    monkeypatch.setattr(dotnet, "run_dotnet_list_vulnerable", fake_run_dotnet_list_vulnerable)
+    monkeypatch.setattr(
+        dotnet_projects, "run_dotnet_list_vulnerable", fake_run_dotnet_list_vulnerable
+    )
 
     csproj = (
         '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>{deps}</ItemGroup></Project>'

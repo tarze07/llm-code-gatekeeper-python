@@ -79,9 +79,10 @@ class EcosystemProvider(Protocol):
     def is_manifest(self, path: str) -> str | None: ...
 
     def parse_manifest(self, path: str, content: str) -> set[Any]:
-        """Zwraca `set[deps.manifests.Dependency]` (typ nieimportowany tutaj,
-        żeby core nie musiał znać całego modelu `Dependency` — patrz
-        `gatekeeper.deps.manifests` po podziale)."""
+        """Zwraca `set[deps.manifests.Dependency]` (typ nieimportowany tutaj
+        przez `Any`, żeby Protocol nie wymuszał konkretnej implementacji —
+        `Dependency` to `gatekeeper_core.deps.manifests.Dependency`, moduł
+        żyje w core razem z parserami manifestów per ekosystem)."""
         ...
 
     def normalize(self, name: str) -> str: ...
