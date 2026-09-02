@@ -38,11 +38,21 @@ from typing import Any
 
 from ..core.change import ChangeContext
 from ..core.finding import Finding, GateResult, Severity
-from ..core.plugins import DiscoveryResult, TestToolchain
-from ..testing.discovery import ESCAPE_MARKERS
-from ..testing.pytest_runner import PytestUnavailable
-from ..testing.toolchain import IsolationBroken
+from ..core.plugins import (
+    DiscoveryResult,
+    TestToolchain,
+    ToolchainIsolationBroken,
+    ToolchainUnavailable,
+)
 from . import Gate, register
+
+#: Markery, którymi autor deklaruje test jako zwolniony z dowodu krzyżowego
+#: (refaktor, dopisanie testów do istniejącego kodu, regresja do buga
+#: naprawionego wcześniej). Nazwy dopasowane do `testing.discovery.ESCAPE_MARKERS`
+#: (python-pack) — jeśli inny toolchain wprowadzi własny słownik markerów,
+#: ta lista jest tylko treścią komunikatu, nie logiką bramki, więc nic się
+#: nie zepsuje, tylko komunikat będzie mniej precyzyjny dla tamtego języka.
+ESCAPE_MARKERS = frozenset({"characterization", "test_backfill", "refactor_only"})
 
 TOOLCHAIN_GROUP = "gatekeeper.test_toolchains"
 
@@ -116,7 +126,7 @@ class CrossVerify(Gate):
 
             try:
                 outcomes, message = toolchain.run_cross_verify(change, checked, self.config)
-            except IsolationBroken as exc:
+            except ToolchainIsolationBroken as exc:
                 facts["tests.isolation_broken"] = True
                 return self.result(
                     status="error",
@@ -125,7 +135,7 @@ class CrossVerify(Gate):
                     findings=findings,
                     message=str(exc),
                 )
-            except PytestUnavailable as exc:
+            except ToolchainUnavailable as exc:
                 return self.result(
                     status="error",
                     duration_s=time.monotonic() - started,

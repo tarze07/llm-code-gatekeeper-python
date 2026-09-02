@@ -24,6 +24,7 @@ from typing import Any
 from ..adapters.base import ToolFailed, ToolMissing
 from ..adapters.coverage import DiffCoverageResult, run_diff_coverage
 from ..core.change import ChangeContext, ChangedFile
+from ..core.plugins import ToolchainIsolationBroken
 from ..core.runner import Sandbox, SandboxPolicy
 from . import discovery, quality
 from .pytest_runner import PytestUnavailable, RunOutput, build_env, module_origin, run_pytest
@@ -31,7 +32,7 @@ from .pytest_runner import PytestUnavailable, RunOutput, build_env, module_origi
 CODE_LANGUAGES = {"python"}
 
 
-class IsolationBroken(RuntimeError):
+class IsolationBroken(ToolchainIsolationBroken):
     pass
 
 

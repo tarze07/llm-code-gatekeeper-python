@@ -114,6 +114,21 @@ class EcosystemProvider(Protocol):
 # --------------------------------------------------------------------- G2.*
 
 
+class ToolchainIsolationBroken(RuntimeError):
+    """`TestToolchain.run_cross_verify()` rzuca to (albo podklasę zdefiniowaną
+    przez pack — patrz `testing.toolchain.IsolationBroken` w python-pack) gdy
+    worktree ze starym kodem przypadkiem widzi nowy kod (np. pakiet
+    zainstalowany edytowalnie). Gate (`gates/g2_crossverify.py`, core-owny)
+    łapie ten typ bazowy, nie konkretną podklasę per-język — inaczej core
+    musiałby importować wyjątek zdefiniowany w pack'u."""
+
+
+class ToolchainUnavailable(RuntimeError):
+    """Jak wyżej: narzędzie testowe toolchaina (pytest, vitest, `dotnet test`…)
+    nie jest dostępne w ogóle — bramka zwraca `status="error"`, nie cichy
+    brak dowodu."""
+
+
 class DiscoveryResult(Protocol):
     """Wynik odkrywania testów — kształt zgodny z dzisiejszym
     `testing.discovery.TestItem`, niezależny od języka."""

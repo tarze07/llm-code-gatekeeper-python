@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from ..core.plugins import ToolchainUnavailable
 from ..core.runner import Sandbox, SandboxPolicy, SandboxUnavailable, scrub_environment
 
 Outcome = Literal["passed", "failed", "error", "skipped", "missing"]
 
 
-class PytestUnavailable(RuntimeError):
+class PytestUnavailable(ToolchainUnavailable):
     pass
 
 
