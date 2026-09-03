@@ -1,3 +1,15 @@
+> ## ⚠️ Repozytorium przeniesione i zarchiwizowane
+>
+> Kod żyje dalej w **[tarze07/llm-code-gatekeeper](https://github.com/tarze07/llm-code-gatekeeper)**, w katalogu [`python/`](https://github.com/tarze07/llm-code-gatekeeper/tree/main/python) — razem z pozostałymi trzema pakietami. Historia tego repo została zachowana w scaleniu (`git log -- python/`).
+>
+> Nazwa pakietu Pythona (`llm-code-gatekeeper-python`) i architektura (entry points) **nie zmieniły się**. Zmienił się wyłącznie adres instalacyjny:
+>
+> ```bash
+> pip install "llm-code-gatekeeper-python @ git+https://github.com/tarze07/llm-code-gatekeeper.git#subdirectory=python"
+> ```
+
+---
+
 # llm-code-gatekeeper-python
 
 Pack **Python** dla [`llm-code-gatekeeper-core`](https://github.com/tarze07/llm-code-gatekeeper-core) — silnika bramy jakości dla kodu generowanego przez agentów LLM (Codex, Claude Code, Cursor, Devin…).
